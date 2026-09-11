@@ -1,0 +1,10 @@
+bin/
+obj/
+Hls/*
+!Hls/.gitkeep
+Data/tvs.json
+Data/*.tmp
+Media/*.mp4
+Media/*.mov
+Media/*.mkv
+Media/.upload-*
