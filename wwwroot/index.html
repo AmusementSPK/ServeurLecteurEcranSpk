@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SPK - Gestion des menus TV</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <main class="shell">
+        <header class="topbar">
+            <div>
+                <div class="eyebrow">AMUSEMENT SPK</div>
+                <h1>Gestion des menus TV</h1>
+                <p>Change les vidéos, renomme les télévisions et ajoute de nouveaux écrans sans toucher au serveur.</p>
+            </div>
+            <button id="refreshBtn" class="secondary">Actualiser</button>
+        </header>
+
+        <section class="summary" aria-live="polite">
+            <div class="summary-card"><span>Télévisions</span><strong id="tvCount">—</strong></div>
+            <div class="summary-card"><span>Flux actifs</span><strong id="runningCount">—</strong></div>
+            <div class="summary-card"><span>Serveur</span><strong id="serverStatus">Connexion…</strong></div>
+        </section>
+
+        <section class="section-head">
+            <div>
+                <h2>Écrans</h2>
+                <p>Chaque carte correspond à un numéro de TV utilisé par l'application Roku.</p>
+            </div>
+            <button id="addTvBtn" class="primary">+ Ajouter une télé</button>
+        </section>
+
+        <div id="message" class="message hidden"></div>
+        <section id="tvGrid" class="tv-grid"></section>
+    </main>
+
+    <dialog id="addTvDialog" class="dialog">
+        <form id="addTvForm" method="dialog">
+            <h3>Ajouter une télévision</h3>
+            <p>Le prochain numéro libre sera attribué automatiquement.</p>
+            <label>
+                Nom de la télévision
+                <input id="newTvName" name="name" maxlength="80" placeholder="Ex. Menu bar, Menu cuisine, Promo">
+            </label>
+            <div class="dialog-actions">
+                <button type="button" id="cancelAddTv" class="secondary">Annuler</button>
+                <button type="submit" class="primary">Créer la télé</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script src="/app.js"></script>
+</body>
+</html>
