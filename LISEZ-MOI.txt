@@ -1,0 +1,99 @@
+SPK - SERVEUR DE STREAMING POUR ROKU TV
+=========================================
+
+BUT
+---
+Ce serveur diffuse directement les fichiers MP4 aux téléviseurs Roku sur le
+réseau local. Il ne transcode pas les vidéos : la qualité reste identique au
+fichier original et la charge du serveur est très faible.
+
+PRÉREQUIS
+---------
+- Windows
+- .NET 10 SDK installé
+- Serveur et téléviseurs sur le même réseau local
+
+INSTALLATION
+------------
+1. Copie tes vidéos dans le dossier Media.
+2. Nomme-les :
+      tv1.mp4
+      tv2.mp4
+      tv3.mp4
+      tv4.mp4
+
+   Tu peux changer les noms dans appsettings.json.
+
+3. Clic droit sur :
+      1_AUTORISER_PARE_FEU.bat
+   puis "Exécuter en tant qu'administrateur".
+
+4. Lance :
+      2_VOIR_IP_SERVEUR.bat
+
+   Note l'adresse IPv4 Ethernet du serveur, par exemple :
+      192.168.1.20
+
+5. Lance :
+      3_DEMARRER_SERVEUR.bat
+
+6. Depuis un autre ordinateur/téléphone du même réseau, teste :
+      http://192.168.1.20:8090/health
+
+7. Les flux deviennent :
+      TV 1 : http://192.168.1.20:8090/tv/1
+      TV 2 : http://192.168.1.20:8090/tv/2
+      TV 3 : http://192.168.1.20:8090/tv/3
+      TV 4 : http://192.168.1.20:8090/tv/4
+
+
+IMPORTANT : BOUCLE VIDÉO
+------------------------
+Le serveur diffuse le fichier. C'est l'application Roku qui doit demander
+de recommencer la lecture lorsque la vidéo atteint la fin.
+
+L'avantage est que Roku ne passe pas par le lecteur USB de la TV :
+on peut donc éviter l'interface Play/Pause qui apparaît actuellement.
+
+
+FORMAT VIDÉO CONSEILLÉ
+----------------------
+Conteneur : MP4
+Vidéo : H.264 / AVC
+Audio : AAC ou aucun audio
+Résolution : 1920x1080 ou 3840x2160 selon les TV
+Framerate : 30 ou 60 fps
+Pixel format : yuv420p
+
+Pour un menu sans son, retire simplement la piste audio lors de l'export.
+
+
+MISE À JOUR D'UN MENU
+---------------------
+Exemple pour modifier la TV 1 :
+
+1. Exporte la nouvelle vidéo.
+2. Remplace Media\tv1.mp4.
+3. Aucun changement de l'URL Roku.
+
+Le serveur envoie des en-têtes "no-cache", donc une nouvelle ouverture du
+flux demandera la version actuelle du fichier.
+
+
+TEST DANS UN NAVIGATEUR
+-----------------------
+Sur un PC du réseau :
+    http://IP_DU_SERVEUR:8090/tv/1
+
+Si le fichier se lit, la partie serveur fonctionne.
+
+
+PROCHAINE ÉTAPE ROKU
+--------------------
+Créer l'application Roku SPK qui :
+- connaît l'URL de sa TV;
+- lance la vidéo plein écran;
+- masque toute interface;
+- relance automatiquement à la fin;
+- retente automatiquement si le serveur redémarre;
+- peut éventuellement récupérer automatiquement sa configuration.
