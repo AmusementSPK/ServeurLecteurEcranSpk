@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>SPK Menu VIDAA</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <video id="player" autoplay muted playsinline></video>
+
+  <div id="overlay" class="overlay">
+    <div class="panel">
+      <div class="brand">AMUSEMENT SPK</div>
+      <h1 id="title">Choisir cette télévision</h1>
+      <p id="subtitle">Chargement de la liste depuis le serveur…</p>
+      <div id="tvList" class="tv-list"></div>
+      <div id="status" class="status"></div>
+      <div class="help">↑ ↓ pour naviguer · OK pour choisir</div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>
