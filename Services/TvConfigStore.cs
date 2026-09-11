@@ -50,20 +50,14 @@ public sealed class TvConfigStore
     {
         lock (_gate)
         {
-            if (_tvs.Count >= Math.Max(1, _cfg.MaxTvCount))
-                throw new InvalidOperationException($"Maximum de {_cfg.MaxTvCount} télévisions atteint.");
-
             var usedIds = _tvs
                 .Select(x => ParseId(x.Id))
-                .Where(x => x > 0)
+                .Where(x => x > 0 && x < int.MaxValue)
                 .ToHashSet();
 
             var nextId = 1;
             while (usedIds.Contains(nextId))
                 nextId++;
-
-            if (nextId > _cfg.MaxTvCount)
-                throw new InvalidOperationException($"Aucun numéro de TV disponible entre 1 et {_cfg.MaxTvCount}.");
 
             var id = nextId.ToString();
             var tv = new TvDefinition
