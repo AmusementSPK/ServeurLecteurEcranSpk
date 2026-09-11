@@ -81,6 +81,20 @@ app.MapGet("/tv/{tvId}", (string tvId, TvConfigStore store) =>
     });
 });
 
+// Contrat volontairement minimal et stable pour l'application Roku.
+// La liste provient de Data/tvs.json : aucun nombre de TV n'est codé dans l'app Roku.
+app.MapGet("/api/roku/tvs", (TvConfigStore store) =>
+{
+    var televisions = store.GetAll().Select(tv => new
+    {
+        id = tv.Id,
+        name = tv.Name,
+        streamUrl = $"/hls/tv{tv.Id}/index.m3u8"
+    });
+
+    return Results.Ok(new { televisions });
+});
+
 app.MapGet("/api/tvs", (TvConfigStore store, HlsProcessManager manager) =>
 {
     var items = store.GetAll().Select(tv =>
@@ -103,28 +117,20 @@ app.MapGet("/api/tvs", (TvConfigStore store, HlsProcessManager manager) =>
 
     return Results.Ok(new
     {
-        maxTvCount = cfg.MaxTvCount,
         televisions = items
     });
 });
 
 app.MapPost("/api/tvs", (CreateTvRequest request, TvConfigStore store) =>
 {
-    try
+    var tv = store.Create(request.Name);
+    return Results.Created($"/api/tvs/{tv.Id}", new
     {
-        var tv = store.Create(request.Name);
-        return Results.Created($"/api/tvs/{tv.Id}", new
-        {
-            id = tv.Id,
-            name = tv.Name,
-            fileName = tv.FileName,
-            streamUrl = $"/hls/tv{tv.Id}/index.m3u8"
-        });
-    }
-    catch (InvalidOperationException ex)
-    {
-        return Results.BadRequest(new { error = ex.Message });
-    }
+        id = tv.Id,
+        name = tv.Name,
+        fileName = tv.FileName,
+        streamUrl = $"/hls/tv{tv.Id}/index.m3u8"
+    });
 });
 
 app.MapPut("/api/tvs/{tvId}/name", (string tvId, RenameTvRequest request, TvConfigStore store) =>
