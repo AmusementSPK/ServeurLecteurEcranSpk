@@ -14,6 +14,7 @@ var toast=document.getElementById('toast');
 var tvs=[];
 var selectedIndex=0;
 var currentTvId='';
+var currentTv=null;
 var retryTimer=null;
 var lastHandledKey='';
 var lastHandledAt=0;
@@ -179,6 +180,7 @@ function confirmSelection(){
 function startTv(tv){
   clearTimeout(retryTimer);
   currentTvId=String(tv.id);
+  currentTv=tv;
   hideOverlay();
 
   try{player.pause();}catch(e){}
@@ -193,6 +195,16 @@ function startTv(tv){
     var promise=player.play();
     if(promise&&promise.catch){promise.catch(function(){showToast('Appuie sur OK pour démarrer la vidéo.');});}
   }catch(e4){showToast('Appuie sur OK pour démarrer la vidéo.');}
+}
+
+function resumeCurrentTv(){
+  hideOverlay();
+  if(currentTv){
+    try{player.play();}catch(e){}
+  }else if(currentTvId){
+    player.src=streamUrl(currentTvId);
+    try{player.load();player.play();}catch(e2){}
+  }
 }
 
 function recoverPlayback(){
@@ -218,36 +230,46 @@ function normalizeKey(event){
   event=event||window.event||{};
   var key=event.key||event.keyIdentifier||'';
   var code=event.keyCode||event.which||event.charCode||0;
+  var physical=event.code||'';
 
-  if(key==='ArrowUp'||key==='Up') return 'up';
-  if(key==='ArrowDown'||key==='Down') return 'down';
-  if(key==='ArrowLeft'||key==='Left') return 'left';
-  if(key==='ArrowRight'||key==='Right') return 'right';
-  if(key==='Enter'||key==='OK'||key==='Select') return 'ok';
-  if(key==='Backspace'||key==='Escape'||key==='BrowserBack') return 'back';
+  if(key==='ArrowUp'||key==='Up'||key==='U+001E'||physical==='ArrowUp') return 'up';
+  if(key==='ArrowDown'||key==='Down'||key==='U+001F'||physical==='ArrowDown') return 'down';
+  if(key==='ArrowLeft'||key==='Left'||key==='U+001C'||physical==='ArrowLeft') return 'left';
+  if(key==='ArrowRight'||key==='Right'||key==='U+001D'||physical==='ArrowRight') return 'right';
+  if(key==='Enter'||key==='OK'||key==='Select'||physical==='Enter'||physical==='NumpadEnter') return 'ok';
+  if(key==='Backspace'||key==='Escape'||key==='BrowserBack'||key==='GoBack') return 'back';
 
+  // Mapping VIDAA documenté.
   if(code===38) return 'up';
   if(code===40) return 'down';
   if(code===37) return 'left';
   if(code===39) return 'right';
   if(code===13||code===32) return 'ok';
+  if(code===8) return 'back';
 
-  // Codes courants VIDAA / HbbTV pour retour et touches couleur.
-  if(code===461||code===8||code===27||code===10009) return 'back';
+  // Variantes observées sur certains moteurs Hisense/Linux OEM.
+  if(code===103||code===29460) return 'up';
+  if(code===108||code===29461) return 'down';
+  if(code===105||code===4) return 'left';
+  if(code===106||code===5) return 'right';
+  if(code===29443) return 'ok';
+
+  // Retour / HbbTV / plateformes OEM.
+  if(code===461||code===27||code===10009||code===166) return 'back';
   if(code===403) return 'red';
   if(code===404) return 'green';
   if(code===405) return 'yellow';
   if(code===406) return 'blue';
 
-  return 'unknown:'+code+':'+key;
+  return 'unknown:'+code+':'+key+':'+physical;
 }
 
 function handleRemoteKey(event){
   var action=normalizeKey(event);
   var now=new Date().getTime();
 
-  // Certains firmwares envoient keydown + keypress pour la même touche.
-  if(action===lastHandledKey&&(now-lastHandledAt)<120){
+  // Certains firmwares envoient le même événement à plusieurs niveaux.
+  if(action===lastHandledKey&&(now-lastHandledAt)<100){
     cancelKey(event);
     return false;
   }
@@ -279,10 +301,32 @@ function handleRemoteKey(event){
     return false;
   }
 
-  if(action==='back'||action==='red'){
+  if(action==='red'){
     if(!selectorVisible) openSelector();
+    else if(currentTvId) resumeCurrentTv();
     cancelKey(event);
     return false;
+  }
+
+  if(action==='back'){
+    if(!selectorVisible){
+      // Pendant la lecture : Retour ouvre le choix des écrans.
+      openSelector();
+      cancelKey(event);
+      return false;
+    }
+
+    if(currentTvId){
+      // Dans le sélecteur avec une TV déjà active : Retour annule le changement.
+      resumeCurrentTv();
+      cancelKey(event);
+      return false;
+    }
+
+    // Au tout premier lancement, aucune TV n'est encore choisie.
+    // Ne PAS avaler Retour : le navigateur/VIDAA peut revenir à l'écran précédent.
+    try{window.close();}catch(e2){}
+    return true;
   }
 
   if(selectorVisible&&action.indexOf('unknown:')===0){
@@ -301,14 +345,17 @@ function cancelKey(event){
 }
 
 // VIDAA documente la navigation sur document.keydown.
-// Le mode capture aide aussi lorsque le navigateur donne le focus à un élément.
+// On écoute aussi keyup et window pour couvrir les firmwares OEM WELCOME.
 document.addEventListener('keydown',handleRemoteKey,true);
-
-// Fallback pour certains navigateurs OEM qui remontent les touches via keypress.
+document.addEventListener('keyup',handleRemoteKey,true);
 document.addEventListener('keypress',handleRemoteKey,true);
+window.addEventListener('keydown',handleRemoteKey,true);
+window.addEventListener('keyup',handleRemoteKey,true);
 
 document.addEventListener('visibilitychange',function(){
-  if(!document.hidden&&currentTvId){try{player.play();}catch(e){}}
+  if(!document.hidden&&currentTvId&&overlay.className.indexOf('hidden')!==-1){
+    try{player.play();}catch(e){}
+  }
 },false);
 
 try{
