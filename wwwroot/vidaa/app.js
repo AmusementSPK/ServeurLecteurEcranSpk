@@ -15,6 +15,8 @@ var tvs=[];
 var selectedIndex=0;
 var currentTvId='';
 var retryTimer=null;
+var lastHandledKey='';
+var lastHandledAt=0;
 
 function apiUrl(){return '/api/tvs';}
 function streamUrl(id){return '/hls/tv'+encodeURIComponent(id)+'/index.m3u8';}
@@ -92,15 +94,17 @@ function showLoadError(message,forceSelector){
 
 function renderSelector(savedId){
   list.innerHTML='';
-  subtitle.innerHTML='Choisis le nom correspondant à cet écran.';
+  subtitle.innerHTML='Utilise ▲ ▼ puis OK pour choisir cet écran.';
   selectedIndex=0;
 
   for(var i=0;i<tvs.length;i++){
     if(String(tvs[i].id)===String(savedId)) selectedIndex=i;
 
-    var row=document.createElement('div');
+    var row=document.createElement('button');
+    row.type='button';
     row.className='tv-item';
     row.setAttribute('data-index',String(i));
+    row.setAttribute('tabindex','0');
 
     var name=document.createElement('span');
     name.innerHTML=escapeHtml(tvs[i].name||('TV '+tvs[i].id));
@@ -111,10 +115,26 @@ function renderSelector(savedId){
 
     row.appendChild(name);
     row.appendChild(id);
+
+    row.onclick=(function(index){
+      return function(){
+        selectedIndex=index;
+        updateSelection();
+        confirmSelection();
+      };
+    })(i);
+
+    row.onfocus=(function(index){
+      return function(){
+        selectedIndex=index;
+        updateSelection(false);
+      };
+    })(i);
+
     list.appendChild(row);
   }
 
-  updateSelection();
+  updateSelection(true);
 }
 
 function escapeHtml(value){
@@ -122,11 +142,11 @@ function escapeHtml(value){
     .replace(/&/g,'&amp;')
     .replace(/</g,'&lt;')
     .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
+    .replace(/\"/g,'&quot;')
     .replace(/'/g,'&#039;');
 }
 
-function updateSelection(){
+function updateSelection(moveFocus){
   var rows=list.getElementsByClassName('tv-item');
   if(!rows.length) return;
   if(selectedIndex<0) selectedIndex=rows.length-1;
@@ -137,8 +157,13 @@ function updateSelection(){
   }
 
   var current=rows[selectedIndex];
-  if(current&&current.scrollIntoView){
-    try{current.scrollIntoView(false);}catch(e){}
+  if(current){
+    if(moveFocus!==false&&current.focus){
+      try{current.focus();}catch(e){}
+    }
+    if(current.scrollIntoView){
+      try{current.scrollIntoView(false);}catch(e2){}
+    }
   }
 }
 
@@ -189,36 +214,107 @@ player.addEventListener('error',function(){showToast('Flux interrompu - reconnex
 player.addEventListener('ended',recoverPlayback,false);
 player.addEventListener('stalled',recoverPlayback,false);
 
-window.addEventListener('keydown',function(event){
-  event=event||window.event;
-  var code=event.keyCode||event.which;
+function normalizeKey(event){
+  event=event||window.event||{};
+  var key=event.key||event.keyIdentifier||'';
+  var code=event.keyCode||event.which||event.charCode||0;
+
+  if(key==='ArrowUp'||key==='Up') return 'up';
+  if(key==='ArrowDown'||key==='Down') return 'down';
+  if(key==='ArrowLeft'||key==='Left') return 'left';
+  if(key==='ArrowRight'||key==='Right') return 'right';
+  if(key==='Enter'||key==='OK'||key==='Select') return 'ok';
+  if(key==='Backspace'||key==='Escape'||key==='BrowserBack') return 'back';
+
+  if(code===38) return 'up';
+  if(code===40) return 'down';
+  if(code===37) return 'left';
+  if(code===39) return 'right';
+  if(code===13||code===32) return 'ok';
+
+  // Codes courants VIDAA / HbbTV pour retour et touches couleur.
+  if(code===461||code===8||code===27||code===10009) return 'back';
+  if(code===403) return 'red';
+  if(code===404) return 'green';
+  if(code===405) return 'yellow';
+  if(code===406) return 'blue';
+
+  return 'unknown:'+code+':'+key;
+}
+
+function handleRemoteKey(event){
+  var action=normalizeKey(event);
+  var now=new Date().getTime();
+
+  // Certains firmwares envoient keydown + keypress pour la même touche.
+  if(action===lastHandledKey&&(now-lastHandledAt)<120){
+    cancelKey(event);
+    return false;
+  }
+  lastHandledKey=action;
+  lastHandledAt=now;
+
   var selectorVisible=overlay.className.indexOf('hidden')===-1;
 
-  if(selectorVisible&&code===38){selectedIndex--;updateSelection();cancelKey(event);return false;}
-  if(selectorVisible&&code===40){selectedIndex++;updateSelection();cancelKey(event);return false;}
-
-  if(code===13){
-    if(selectorVisible) confirmSelection();
-    else{try{if(player.paused)player.play();}catch(e){}}
-    cancelKey(event);return false;
+  if(selectorVisible&&action==='up'){
+    selectedIndex--;
+    updateSelection(true);
+    cancelKey(event);
+    return false;
   }
 
-  if(code===461||code===8||code===27||code===403||code===18){
+  if(selectorVisible&&action==='down'){
+    selectedIndex++;
+    updateSelection(true);
+    cancelKey(event);
+    return false;
+  }
+
+  if(action==='ok'){
+    if(selectorVisible) confirmSelection();
+    else{
+      try{if(player.paused)player.play();}catch(e){}
+    }
+    cancelKey(event);
+    return false;
+  }
+
+  if(action==='back'||action==='red'){
     if(!selectorVisible) openSelector();
-    cancelKey(event);return false;
+    cancelKey(event);
+    return false;
+  }
+
+  if(selectorVisible&&action.indexOf('unknown:')===0){
+    status.innerHTML='Touche reçue : '+escapeHtml(action.substring(8));
   }
 
   return true;
-},false);
+}
 
 function cancelKey(event){
+  if(!event) return;
   if(event.preventDefault) event.preventDefault();
+  if(event.stopPropagation) event.stopPropagation();
+  event.cancelBubble=true;
   event.returnValue=false;
 }
+
+// VIDAA documente la navigation sur document.keydown.
+// Le mode capture aide aussi lorsque le navigateur donne le focus à un élément.
+document.addEventListener('keydown',handleRemoteKey,true);
+
+// Fallback pour certains navigateurs OEM qui remontent les touches via keypress.
+document.addEventListener('keypress',handleRemoteKey,true);
 
 document.addEventListener('visibilitychange',function(){
   if(!document.hidden&&currentTvId){try{player.play();}catch(e){}}
 },false);
+
+try{
+  document.body.setAttribute('tabindex','-1');
+  document.body.focus();
+}catch(e){}
 
 loadTvs(false);
 })();
