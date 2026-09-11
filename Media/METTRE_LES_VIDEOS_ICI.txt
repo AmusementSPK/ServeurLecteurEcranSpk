@@ -1,1 +1,7 @@
-Place ici tv1.mp4, tv2.mp4, tv3.mp4, tv4.mp4.
+Les vidéos de menus sont stockées ici.
+
+Le moyen recommandé pour les modifier est maintenant l'interface web :
+    http://IP_DU_SERVEUR:8090/
+
+Formats acceptés par l'interface : MP4.
+Format recommandé : H.264 / AVC, AAC si audio.
