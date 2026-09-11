@@ -1,0 +1,31 @@
+SPK MENU - APP VIDAA
+====================
+
+URL DE L'APP
+------------
+http://10.10.0.135:8090/vidaa/
+
+INSTALLATION SUR LA TV
+----------------------
+1. Le serveur SPK doit être démarré.
+2. Sur la TV VIDAA, ouvrir le navigateur.
+3. Entrer : hisense://debug
+4. Dans App Name : SPK Menu
+5. Dans App Url : http://10.10.0.135:8090/vidaa/
+6. Résolution : 1080
+7. Installer.
+8. Quitter la page debug puis ouvrir l'app depuis Apps.
+
+FONCTIONNEMENT
+--------------
+- L'app demande au serveur la liste actuelle des télévisions.
+- Elle affiche leurs vrais noms.
+- Le choix est mémorisé dans la TV avec localStorage.
+- Au prochain démarrage, le menu choisi démarre automatiquement.
+- Les flux restent : /hls/tvX/index.m3u8
+- La boucle vidéo reste faite côté serveur par FFmpeg.
+- Retour / touche rouge / Menu ouvre de nouveau le sélecteur selon la télécommande.
+
+IMPORTANT
+---------
+L'app est une Web App HTML5 hébergée par le serveur SPK. Il n'y a donc aucun ZIP à réinstaller quand la liste ou le nom des télévisions change.
