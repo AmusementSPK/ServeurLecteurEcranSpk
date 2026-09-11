@@ -20,62 +20,79 @@ function apiUrl(){return '/api/tvs';}
 function streamUrl(id){return '/hls/tv'+encodeURIComponent(id)+'/index.m3u8';}
 
 function showOverlay(message){
-  overlay.classList.remove('hidden');
-  if(message) status.textContent=message;
+  overlay.className='overlay';
+  if(message) status.innerHTML=message;
 }
 
 function hideOverlay(){
-  overlay.classList.add('hidden');
-  status.textContent='';
+  overlay.className='overlay hidden';
+  status.innerHTML='';
 }
 
 function showToast(message){
-  toast.textContent=message;
-  toast.classList.remove('hidden');
-  setTimeout(function(){toast.classList.add('hidden');},2500);
+  toast.innerHTML=message;
+  toast.className='toast';
+  setTimeout(function(){toast.className='toast hidden';},2500);
 }
 
 function loadTvs(forceSelector){
-  title.textContent='Choisir cette télévision';
-  subtitle.textContent='Chargement de la liste depuis le serveur…';
-  status.textContent='';
+  title.innerHTML='Choisir cette télévision';
+  subtitle.innerHTML='Chargement de la liste depuis le serveur…';
+  status.innerHTML='';
   showOverlay();
 
-  fetch(apiUrl(),{cache:'no-store'})
-    .then(function(response){
-      if(!response.ok) throw new Error('Serveur inaccessible ('+response.status+').');
-      return response.json();
-    })
-    .then(function(data){
-      tvs=(data&&data.televisions)||[];
-      if(!tvs.length) throw new Error('Aucune télévision configurée sur le serveur.');
+  var xhr=new XMLHttpRequest();
+  xhr.open('GET',apiUrl()+'?r='+new Date().getTime(),true);
+  xhr.setRequestHeader('Accept','application/json');
+  xhr.onreadystatechange=function(){
+    if(xhr.readyState!==4) return;
 
-      var saved='';
-      try{saved=localStorage.getItem(STORAGE_KEY)||'';}catch(e){}
+    if(xhr.status<200||xhr.status>=300){
+      showLoadError('Serveur inaccessible ('+xhr.status+').',forceSelector);
+      return;
+    }
 
-      if(saved&&!forceSelector){
-        for(var i=0;i<tvs.length;i++){
-          if(String(tvs[i].id)===String(saved)){
-            startTv(tvs[i]);
-            return;
-          }
+    var data=null;
+    try{data=JSON.parse(xhr.responseText);}catch(e){
+      showLoadError('Réponse serveur invalide.',forceSelector);
+      return;
+    }
+
+    tvs=(data&&data.televisions)||[];
+    if(!tvs.length){
+      showLoadError('Aucune télévision configurée sur le serveur.',forceSelector);
+      return;
+    }
+
+    var saved='';
+    try{saved=localStorage.getItem(STORAGE_KEY)||'';}catch(e2){}
+
+    if(saved&&!forceSelector){
+      for(var i=0;i<tvs.length;i++){
+        if(String(tvs[i].id)===String(saved)){
+          startTv(tvs[i]);
+          return;
         }
       }
+    }
 
-      renderSelector(saved);
-    })
-    .catch(function(error){
-      list.innerHTML='';
-      subtitle.textContent='Impossible de récupérer la liste.';
-      status.textContent=error.message+' Nouvelle tentative dans 5 secondes.';
-      clearTimeout(retryTimer);
-      retryTimer=setTimeout(function(){loadTvs(forceSelector);},RETRY_MS);
-    });
+    renderSelector(saved);
+  };
+  xhr.onerror=function(){showLoadError('Connexion au serveur impossible.',forceSelector);};
+  xhr.send(null);
+}
+
+function showLoadError(message,forceSelector){
+  list.innerHTML='';
+  subtitle.innerHTML='Impossible de récupérer la liste.';
+  status.innerHTML=message+' Nouvelle tentative dans 5 secondes.';
+  clearTimeout(retryTimer);
+  retryTimer=setTimeout(function(){loadTvs(forceSelector);},RETRY_MS);
 }
 
 function renderSelector(savedId){
   list.innerHTML='';
-  subtitle.textContent='Choisis le nom correspondant à cet écran.';
+  subtitle.innerHTML='Choisis le nom correspondant à cet écran.';
   selectedIndex=0;
 
   for(var i=0;i<tvs.length;i++){
@@ -86,11 +103,11 @@ function renderSelector(savedId){
     row.setAttribute('data-index',String(i));
 
     var name=document.createElement('span');
-    name.textContent=tvs[i].name||('TV '+tvs[i].id);
+    name.innerHTML=escapeHtml(tvs[i].name||('TV '+tvs[i].id));
 
     var id=document.createElement('span');
     id.className='id';
-    id.textContent='TV '+tvs[i].id;
+    id.innerHTML='TV '+escapeHtml(tvs[i].id);
 
     row.appendChild(name);
     row.appendChild(id);
@@ -100,6 +117,15 @@ function renderSelector(savedId){
   updateSelection();
 }
 
+function escapeHtml(value){
+  return String(value===undefined||value===null?'':value)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#039;');
+}
+
 function updateSelection(){
   var rows=list.getElementsByClassName('tv-item');
   if(!rows.length) return;
@@ -107,12 +133,13 @@ function updateSelection(){
   if(selectedIndex>=rows.length) selectedIndex=0;
 
   for(var i=0;i<rows.length;i++){
-    if(i===selectedIndex) rows[i].classList.add('selected');
-    else rows[i].classList.remove('selected');
+    rows[i].className=(i===selectedIndex)?'tv-item selected':'tv-item';
   }
 
   var current=rows[selectedIndex];
-  if(current&&current.scrollIntoView) current.scrollIntoView({block:'nearest'});
+  if(current&&current.scrollIntoView){
+    try{current.scrollIntoView(false);}catch(e){}
+  }
 }
 
 function confirmSelection(){
@@ -129,81 +156,69 @@ function startTv(tv){
   currentTvId=String(tv.id);
   hideOverlay();
 
-  player.pause();
+  try{player.pause();}catch(e){}
   player.removeAttribute('src');
-  player.load();
+  try{player.load();}catch(e2){}
 
   player.muted=true;
   player.src=streamUrl(currentTvId);
-  player.load();
+  try{player.load();}catch(e3){}
 
-  var promise=player.play();
-  if(promise&&promise.catch){
-    promise.catch(function(){
-      showToast('Appuie sur OK pour démarrer la vidéo.');
-    });
-  }
+  try{
+    var promise=player.play();
+    if(promise&&promise.catch){promise.catch(function(){showToast('Appuie sur OK pour démarrer la vidéo.');});}
+  }catch(e4){showToast('Appuie sur OK pour démarrer la vidéo.');}
 }
 
 function recoverPlayback(){
   if(!currentTvId) return;
   clearTimeout(retryTimer);
   retryTimer=setTimeout(function(){
-    player.src=streamUrl(currentTvId)+'?r='+Date.now();
-    player.load();
-    var p=player.play();
-    if(p&&p.catch) p.catch(function(){});
+    player.src=streamUrl(currentTvId)+'?r='+new Date().getTime();
+    try{player.load();player.play();}catch(e){}
   },RETRY_MS);
 }
 
 function openSelector(){
   clearTimeout(retryTimer);
-  player.pause();
+  try{player.pause();}catch(e){}
   loadTvs(true);
 }
 
-player.addEventListener('error',function(){
-  showToast('Flux interrompu - reconnexion automatique');
-  recoverPlayback();
-});
-
-player.addEventListener('ended',function(){
-  // Un HLS live normal ne doit jamais finir. Si cela arrive, on reconnecte.
-  recoverPlayback();
-});
-
-player.addEventListener('stalled',recoverPlayback);
+player.addEventListener('error',function(){showToast('Flux interrompu - reconnexion automatique');recoverPlayback();},false);
+player.addEventListener('ended',recoverPlayback,false);
+player.addEventListener('stalled',recoverPlayback,false);
 
 window.addEventListener('keydown',function(event){
+  event=event||window.event;
   var code=event.keyCode||event.which;
-  var selectorVisible=!overlay.classList.contains('hidden');
+  var selectorVisible=overlay.className.indexOf('hidden')===-1;
 
-  // Flèches
-  if(selectorVisible&&code===38){selectedIndex--;updateSelection();event.preventDefault();return false;}
-  if(selectorVisible&&code===40){selectedIndex++;updateSelection();event.preventDefault();return false;}
+  if(selectorVisible&&code===38){selectedIndex--;updateSelection();cancelKey(event);return false;}
+  if(selectorVisible&&code===40){selectedIndex++;updateSelection();cancelKey(event);return false;}
 
-  // OK / Enter
   if(code===13){
     if(selectorVisible) confirmSelection();
-    else if(player.paused) player.play();
-    event.preventDefault();return false;
+    else{try{if(player.paused)player.play();}catch(e){}}
+    cancelKey(event);return false;
   }
 
-  // Retour / Escape / touche rouge VIDAA-HbbTV / Menu : ouvre le sélecteur.
   if(code===461||code===8||code===27||code===403||code===18){
     if(!selectorVisible) openSelector();
-    event.preventDefault();return false;
+    cancelKey(event);return false;
   }
 
   return true;
-});
+},false);
+
+function cancelKey(event){
+  if(event.preventDefault) event.preventDefault();
+  event.returnValue=false;
+}
 
 document.addEventListener('visibilitychange',function(){
-  if(!document.hidden&&currentTvId){
-    var p=player.play();
-    if(p&&p.catch) p.catch(function(){});
-  }
-});
+  if(!document.hidden&&currentTvId){try{player.play();}catch(e){}}
+},false);
 
 loadTvs(false);
 })();
