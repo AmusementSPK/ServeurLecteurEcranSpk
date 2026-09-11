@@ -15,8 +15,8 @@ Les Roku continuent d'utiliser exactement :
 La boucle est donc toujours faite par le SERVEUR et non par la télévision.
 
 
-NOUVEAU : INTERFACE WEB
------------------------
+INTERFACE WEB
+-------------
 Ouvre :
     http://IP_DU_SERVEUR:8090/
 
@@ -38,6 +38,29 @@ La Roku reste configurée comme TV 3 et l'adresse reste :
 Renommer la TV ne casse donc rien.
 
 
+APPLICATION ROKU : LISTE DYNAMIQUE
+----------------------------------
+L'application Roku v1.6 ne contient plus de liste TV 1 à TV 8 codée en dur.
+
+Quand le sélecteur est ouvert, elle appelle :
+    /api/roku/tvs
+
+Le serveur renvoie les ID et les noms actuels.
+Exemple :
+    Menu Burgers (TV 1)
+    Boissons (TV 2)
+    Promotions Entrée (TV 5)
+
+Conséquences :
+- créer une nouvelle TV dans le panneau web la rend automatiquement disponible sur Roku;
+- renommer une TV change automatiquement son nom dans le sélecteur Roku;
+- l'ID reste stable et continue d'identifier l'URL HLS;
+- il n'y a plus de limite fixe à 8 TV dans le serveur ou le sélecteur Roku;
+- aucun nouveau ZIP Roku n'est requis lorsqu'une TV est ajoutée ou renommée.
+
+Le fichier Roku config/server.env contient seulement l'adresse IP et le port du serveur.
+
+
 INSTALLATION
 ------------
 1. Installer .NET 10 SDK.
@@ -57,10 +80,7 @@ Au premier démarrage, le serveur crée automatiquement :
 Après ce premier démarrage, l'interface web gère Data/tvs.json.
 Le fichier est volontairement ignoré par Git pour ne pas écraser les noms des TV lors d'un pull.
 
-La limite est actuellement :
-    MaxTvCount = 8
-
-Cela correspond à l'application Roku actuelle qui propose TV 1 à TV 8.
+Il n'y a plus de limite MaxTvCount arbitraire. Les numéros sont attribués automatiquement avec le prochain ID libre.
 
 
 CHANGER UNE VIDEO
