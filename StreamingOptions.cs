@@ -6,7 +6,6 @@ public sealed class StreamingOptions
     public string FfmpegPath { get; set; } = "ffmpeg";
     public int SegmentSeconds { get; set; } = 4;
     public int PlaylistSize { get; set; } = 8;
-    public int MaxTvCount { get; set; } = 8;
 
     // Utilisé uniquement pour initialiser Data/tvs.json au premier démarrage.
     // Ensuite, le panneau web conserve la configuration dynamique dans Data/tvs.json.
