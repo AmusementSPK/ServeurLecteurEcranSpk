@@ -36,14 +36,6 @@ public sealed class VideoNormalizer
         psi.ArgumentList.Add("-loglevel");
         psi.ArgumentList.Add("error");
         psi.ArgumentList.Add("-y");
-
-        if (isStillImage)
-        {
-            // Répète le fichier image comme source afin de produire exactement 10 secondes.
-            psi.ArgumentList.Add("-stream_loop");
-            psi.ArgumentList.Add("-1");
-        }
-
         psi.ArgumentList.Add("-i");
         psi.ArgumentList.Add(inputPath);
 
@@ -56,9 +48,19 @@ public sealed class VideoNormalizer
             psi.ArgumentList.Add("0:a?");
         }
 
-        // Format de référence SPK : 1080p max, 30 fps constant, H.264 très compatible.
         psi.ArgumentList.Add("-vf");
-        psi.ArgumentList.Add("scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=30");
+        if (isStillImage)
+        {
+            // Toujours la première image seulement, même si le fichier est un GIF/WebP animé.
+            // Elle est ensuite clonée pendant exactement 10 secondes.
+            psi.ArgumentList.Add("select='eq(n,0)',scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,tpad=stop_mode=clone:stop_duration=10,fps=30");
+        }
+        else
+        {
+            // Vidéos : 1080p max et 30 fps constant pour un HLS stable sur Roku / VIDAA.
+            psi.ArgumentList.Add("scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=30");
+        }
+
         psi.ArgumentList.Add("-c:v");
         psi.ArgumentList.Add("libx264");
         psi.ArgumentList.Add("-preset");
