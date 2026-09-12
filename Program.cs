@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +35,45 @@ var mediaRoot = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, c
 Directory.CreateDirectory(hlsRoot);
 Directory.CreateDirectory(mediaRoot);
 
+string ResolveMediaPath(string relativePath)
+{
+    var normalizedRelative = (relativePath ?? "").Replace('/', Path.DirectorySeparatorChar);
+    var fullPath = Path.GetFullPath(Path.Combine(mediaRoot, normalizedRelative));
+    var rootWithSeparator = mediaRoot.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+    if (!fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException("Chemin média invalide.");
+
+    return fullPath;
+}
+
+string MakeSafeBaseName(string originalFileName)
+{
+    var incomingName = (originalFileName ?? "")
+        .Replace('\\', '/')
+        .Split('/', StringSplitOptions.RemoveEmptyEntries)
+        .LastOrDefault() ?? "media";
+
+    var baseName = Path.GetFileNameWithoutExtension(incomingName).Trim();
+    var invalid = Path.GetInvalidFileNameChars().ToHashSet();
+    var builderName = new StringBuilder();
+
+    foreach (var ch in baseName)
+    {
+        if (!invalid.Contains(ch) && ch != '/' && ch != '\\')
+            builderName.Append(ch);
+    }
+
+    var result = builderName.ToString().Trim().TrimEnd('.', ' ');
+    if (string.IsNullOrWhiteSpace(result))
+        result = "media";
+
+    if (result.Length > 120)
+        result = result[..120].TrimEnd('.', ' ');
+
+    return result;
+}
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
@@ -64,7 +104,6 @@ app.MapGet("/health", (HlsProcessManager manager) => Results.Ok(new
     streams = manager.GetStatus()
 }));
 
-// Route de diagnostic compatible avec l'ancien serveur.
 app.MapGet("/tv/{tvId}", (string tvId, TvConfigStore store) =>
 {
     var tv = store.Get(tvId);
@@ -81,7 +120,6 @@ app.MapGet("/tv/{tvId}", (string tvId, TvConfigStore store) =>
     });
 });
 
-// Contrat minimal et stable pour l'application Roku.
 app.MapGet("/api/roku/tvs", (TvConfigStore store) =>
 {
     var televisions = store.GetAll().Select(tv => new
@@ -98,14 +136,25 @@ app.MapGet("/api/tvs", (TvConfigStore store, HlsProcessManager manager) =>
 {
     var items = store.GetAll().Select(tv =>
     {
-        var filePath = Path.Combine(mediaRoot, tv.FileName);
-        var info = File.Exists(filePath) ? new FileInfo(filePath) : null;
+        string filePath;
+        try
+        {
+            filePath = ResolveMediaPath(tv.FileName);
+        }
+        catch
+        {
+            filePath = "";
+        }
+
+        var info = !string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath)
+            ? new FileInfo(filePath)
+            : null;
 
         return new
         {
             id = tv.Id,
             name = tv.Name,
-            fileName = tv.FileName,
+            fileName = Path.GetFileName(tv.FileName),
             hasVideo = info is not null,
             fileSize = info?.Length ?? 0,
             lastModified = info?.LastWriteTime,
@@ -124,7 +173,7 @@ app.MapPost("/api/tvs", (CreateTvRequest request, TvConfigStore store) =>
     {
         id = tv.Id,
         name = tv.Name,
-        fileName = tv.FileName,
+        fileName = Path.GetFileName(tv.FileName),
         streamUrl = $"/hls/tv{tv.Id}/index.m3u8"
     });
 });
@@ -154,42 +203,64 @@ app.MapPost("/api/tvs/{tvId}/video", async (
         return Results.NotFound(new { error = "Télévision introuvable." });
 
     if (!request.HasFormContentType)
-        return Results.BadRequest(new { error = "Le fichier vidéo est manquant." });
+        return Results.BadRequest(new { error = "Le fichier média est manquant." });
 
     var form = await request.ReadFormAsync(request.HttpContext.RequestAborted);
     var file = form.Files.GetFile("video") ?? form.Files.FirstOrDefault();
 
     if (file is null || file.Length == 0)
-        return Results.BadRequest(new { error = "Le fichier vidéo est vide." });
+        return Results.BadRequest(new { error = "Le fichier média est vide." });
 
-    var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-    var allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    var originalFileName = file.FileName
+        .Replace('\\', '/')
+        .Split('/', StringSplitOptions.RemoveEmptyEntries)
+        .LastOrDefault() ?? "media";
+
+    var extension = Path.GetExtension(originalFileName).ToLowerInvariant();
+
+    var videoExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        ".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".mpeg", ".mpg"
+        ".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".mpeg", ".mpg",
+        ".wmv", ".flv", ".mts", ".m2ts", ".3gp"
     };
 
-    if (!allowedExtensions.Contains(extension))
+    var imageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tif", ".tiff",
+        ".avif", ".heic", ".heif", ".jfif"
+    };
+
+    var isImage = imageExtensions.Contains(extension) ||
+                  (file.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ?? false);
+    var isVideo = videoExtensions.Contains(extension) ||
+                  (file.ContentType?.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ?? false);
+
+    if (!isImage && !isVideo)
     {
         return Results.BadRequest(new
         {
-            error = "Format non supporté. Utilise MP4, MOV, M4V, MKV, WEBM, AVI, MPEG ou MPG."
+            error = "Format non supporté. Envoie une vidéo ou une image standard (JPG, PNG, WEBP, GIF, TIFF, AVIF, HEIC, etc.)."
         });
     }
 
-    var targetName = Path.GetFileName(tv.FileName);
-    var targetPath = Path.GetFullPath(Path.Combine(mediaRoot, targetName));
+    var safeBaseName = MakeSafeBaseName(originalFileName);
+    var outputFileName = safeBaseName + ".mp4";
+    var relativeTargetPath = $"tv{tv.Id}/{outputFileName}";
+    var targetPath = ResolveMediaPath(relativeTargetPath);
+    var targetDirectory = Path.GetDirectoryName(targetPath)!;
+    Directory.CreateDirectory(targetDirectory);
 
-    if (!targetPath.StartsWith(mediaRoot, StringComparison.OrdinalIgnoreCase))
-        return Results.BadRequest(new { error = "Chemin vidéo invalide." });
+    var oldMediaPath = ResolveMediaPath(tv.FileName);
+    var incomingDirectory = Path.Combine(mediaRoot, ".incoming");
+    Directory.CreateDirectory(incomingDirectory);
 
-    // On conserve l'ancienne vidéo en diffusion pendant l'upload ET la conversion.
-    // Le flux n'est arrêté que quelques instants au moment du remplacement final.
+    var tempExtension = string.IsNullOrWhiteSpace(extension) ? ".bin" : extension;
     var uploadTempPath = Path.Combine(
-        mediaRoot,
-        $".upload-{tv.Id}-{Guid.NewGuid():N}{extension}");
+        incomingDirectory,
+        $"upload-{tv.Id}-{Guid.NewGuid():N}{tempExtension}");
     var normalizedTempPath = Path.Combine(
-        mediaRoot,
-        $".normalized-{tv.Id}-{Guid.NewGuid():N}.mp4");
+        targetDirectory,
+        $".normalized-{Guid.NewGuid():N}.mp4");
 
     var streamWasStopped = false;
 
@@ -200,17 +271,25 @@ app.MapPost("/api/tvs/{tvId}/video", async (
             await file.CopyToAsync(output, request.HttpContext.RequestAborted);
         }
 
-        // Tous les ordinateurs peuvent envoyer leur fichier tel quel.
-        // Le serveur le convertit lui-même vers le format vidéo de référence SPK.
+        // Vidéo : normalisation H.264/AAC 30 fps.
+        // Image : conversion en MP4 H.264 de 10 secondes, image fixe.
         await normalizer.NormalizeAsync(
             uploadTempPath,
             normalizedTempPath,
+            isImage,
             request.HttpContext.RequestAborted);
 
         manager.Stop(tv.Id);
         streamWasStopped = true;
 
         File.Move(normalizedTempPath, targetPath, overwrite: true);
+        store.SetMediaFile(tv.Id, relativeTargetPath);
+
+        if (!oldMediaPath.Equals(targetPath, StringComparison.OrdinalIgnoreCase) && File.Exists(oldMediaPath))
+        {
+            try { File.Delete(oldMediaPath); } catch { }
+        }
+
         manager.Restart(tv.Id);
         streamWasStopped = false;
 
@@ -220,8 +299,10 @@ app.MapPost("/api/tvs/{tvId}/video", async (
             status = "OK",
             tv = tv.Id,
             name = tv.Name,
-            fileName = tv.FileName,
-            originalFileName = Path.GetFileName(file.FileName),
+            fileName = outputFileName,
+            originalFileName,
+            sourceType = isImage ? "image" : "video",
+            imageDurationSeconds = isImage ? 10 : (int?)null,
             size = info.Length,
             normalized = true,
             streamUrl = $"/hls/tv{tv.Id}/index.m3u8"
@@ -242,7 +323,7 @@ app.MapPost("/api/tvs/{tvId}/video", async (
             manager.Restart(tv.Id);
 
         return Results.Problem(
-            title: "Impossible de préparer la vidéo.",
+            title: "Impossible de préparer le média.",
             detail: ex.Message,
             statusCode: StatusCodes.Status500InternalServerError);
     }
