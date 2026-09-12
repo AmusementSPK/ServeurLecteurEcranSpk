@@ -28,8 +28,6 @@ function absoluteStreamUrl(path) {
 }
 
 async function loadTvs() {
-    // Ne jamais reconstruire la grille pendant qu'un fichier est choisi ou envoyé.
-    // Les navigateurs interdisent de restaurer un <input type=file> après un rerender.
     if (state.uploading.size > 0) return;
 
     const hasSelectedFile = [...document.querySelectorAll('.file-input')]
@@ -145,8 +143,6 @@ function bindCardEvents() {
         button.addEventListener('click', () => {
             const id = button.dataset.tv;
             const input = document.getElementById(`file-${id}`);
-
-            // Important : vider avant d'ouvrir permet de reprendre exactement le même fichier.
             input.value = '';
             input.click();
         });
@@ -311,6 +307,3 @@ document.getElementById('addTvForm').addEventListener('submit', async event => {
 });
 
 loadTvs();
-
-// Rafraîchissement léger. Il est automatiquement suspendu dès qu'un fichier est choisi.
-setInterval(loadTvs, 15000);
