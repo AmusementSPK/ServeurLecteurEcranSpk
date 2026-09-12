@@ -17,6 +17,7 @@ public sealed class VideoNormalizer
     public async Task NormalizeAsync(
         string inputPath,
         string outputPath,
+        bool isStillImage,
         CancellationToken cancellationToken)
     {
         if (File.Exists(outputPath))
@@ -35,19 +36,29 @@ public sealed class VideoNormalizer
         psi.ArgumentList.Add("-loglevel");
         psi.ArgumentList.Add("error");
         psi.ArgumentList.Add("-y");
+
+        if (isStillImage)
+        {
+            // Répète le fichier image comme source afin de produire exactement 10 secondes.
+            psi.ArgumentList.Add("-stream_loop");
+            psi.ArgumentList.Add("-1");
+        }
+
         psi.ArgumentList.Add("-i");
         psi.ArgumentList.Add(inputPath);
 
-        // Une seule piste vidéo, audio facultatif.
         psi.ArgumentList.Add("-map");
         psi.ArgumentList.Add("0:v:0");
-        psi.ArgumentList.Add("-map");
-        psi.ArgumentList.Add("0:a?");
+
+        if (!isStillImage)
+        {
+            psi.ArgumentList.Add("-map");
+            psi.ArgumentList.Add("0:a?");
+        }
 
         // Format de référence SPK : 1080p max, 30 fps constant, H.264 très compatible.
-        // Les keyframes toutes les 2 secondes rendent les segments HLS propres et fluides.
         psi.ArgumentList.Add("-vf");
-        psi.ArgumentList.Add("scale='min(1920,iw)':-2:force_original_aspect_ratio=decrease,fps=30");
+        psi.ArgumentList.Add("scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=30");
         psi.ArgumentList.Add("-c:v");
         psi.ArgumentList.Add("libx264");
         psi.ArgumentList.Add("-preset");
@@ -67,14 +78,23 @@ public sealed class VideoNormalizer
         psi.ArgumentList.Add("-sc_threshold");
         psi.ArgumentList.Add("0");
 
-        psi.ArgumentList.Add("-c:a");
-        psi.ArgumentList.Add("aac");
-        psi.ArgumentList.Add("-b:a");
-        psi.ArgumentList.Add("160k");
-        psi.ArgumentList.Add("-ar");
-        psi.ArgumentList.Add("48000");
-        psi.ArgumentList.Add("-ac");
-        psi.ArgumentList.Add("2");
+        if (isStillImage)
+        {
+            psi.ArgumentList.Add("-an");
+            psi.ArgumentList.Add("-t");
+            psi.ArgumentList.Add("10");
+        }
+        else
+        {
+            psi.ArgumentList.Add("-c:a");
+            psi.ArgumentList.Add("aac");
+            psi.ArgumentList.Add("-b:a");
+            psi.ArgumentList.Add("160k");
+            psi.ArgumentList.Add("-ar");
+            psi.ArgumentList.Add("48000");
+            psi.ArgumentList.Add("-ac");
+            psi.ArgumentList.Add("2");
+        }
 
         psi.ArgumentList.Add("-movflags");
         psi.ArgumentList.Add("+faststart");
@@ -83,7 +103,9 @@ public sealed class VideoNormalizer
         using var process = new Process { StartInfo = psi };
 
         _logger.LogInformation(
-            "Normalisation vidéo: {Input} -> {Output}",
+            isStillImage
+                ? "Conversion image fixe 10 s: {Input} -> {Output}"
+                : "Normalisation vidéo: {Input} -> {Output}",
             Path.GetFileName(inputPath),
             Path.GetFileName(outputPath));
 
@@ -106,9 +128,9 @@ public sealed class VideoNormalizer
                 ? $"FFmpeg a terminé avec le code {process.ExitCode}."
                 : stderr.Trim();
 
-            throw new InvalidOperationException($"Conversion vidéo impossible: {detail}");
+            throw new InvalidOperationException($"Conversion média impossible: {detail}");
         }
 
-        _logger.LogInformation("Normalisation vidéo terminée.");
+        _logger.LogInformation("Conversion média terminée.");
     }
 }
