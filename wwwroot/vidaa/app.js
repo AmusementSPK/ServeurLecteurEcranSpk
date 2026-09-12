@@ -3,6 +3,10 @@
 
 var STORAGE_KEY='spk.vidaa.tvId';
 var RETRY_MS=5000;
+var AUTO_SCROLL_EDGE=130;
+var AUTO_SCROLL_STEP=22;
+var AUTO_SCROLL_INTERVAL_MS=40;
+
 var player=document.getElementById('player');
 var overlay=document.getElementById('overlay');
 var list=document.getElementById('tvList');
@@ -18,6 +22,7 @@ var currentTv=null;
 var retryTimer=null;
 var lastHandledKey='';
 var lastHandledAt=0;
+var autoScrollDirection=0;
 
 function apiUrl(){return '/api/tvs';}
 function streamUrl(id){return '/hls/tv'+encodeURIComponent(id)+'/index.m3u8';}
@@ -31,6 +36,7 @@ function showOverlay(message){
 function hideOverlay(){
   overlay.className='overlay hidden';
   status.innerHTML='';
+  autoScrollDirection=0;
 }
 
 function showToast(message){
@@ -96,7 +102,7 @@ function showLoadError(message,forceSelector){
 
 function renderSelector(savedId){
   list.innerHTML='';
-  subtitle.innerHTML='Souris + clic gauche pour choisir. Les flèches ▲ ▼ + OK restent aussi disponibles.';
+  subtitle.innerHTML='Souris + clic gauche pour choisir. Place le curseur en bas ou en haut de l’écran pour faire défiler.';
   selectedIndex=0;
 
   for(var i=0;i<tvs.length;i++){
@@ -250,7 +256,6 @@ document.addEventListener('mousedown',function(event){
   return true;
 },true);
 
-// Fallback si le navigateur VIDAA génère seulement un événement click.
 player.addEventListener('click',function(event){
   if(!selectorVisible()){
     openSelector();
@@ -258,6 +263,37 @@ player.addEventListener('click',function(event){
   }
   return false;
 },false);
+
+// Auto-scroll VIDAA : le curseur au bas de l'écran descend la liste,
+// le curseur en haut la remonte. Aucun bouton Chaîne requis.
+document.addEventListener('mousemove',function(event){
+  if(!selectorVisible()){
+    autoScrollDirection=0;
+    return;
+  }
+
+  event=event||window.event||{};
+  var y=event.clientY;
+  var height=window.innerHeight||document.documentElement.clientHeight||1080;
+
+  if(typeof y!=='number'){
+    autoScrollDirection=0;
+    return;
+  }
+
+  if(y>=height-AUTO_SCROLL_EDGE){
+    autoScrollDirection=1;
+  }else if(y<=AUTO_SCROLL_EDGE){
+    autoScrollDirection=-1;
+  }else{
+    autoScrollDirection=0;
+  }
+},true);
+
+setInterval(function(){
+  if(!selectorVisible()||autoScrollDirection===0) return;
+  list.scrollTop=list.scrollTop+(autoScrollDirection*AUTO_SCROLL_STEP);
+},AUTO_SCROLL_INTERVAL_MS);
 
 function cancelMouse(event){
   if(!event) return;
