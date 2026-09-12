@@ -21,6 +21,7 @@ var lastHandledAt=0;
 
 function apiUrl(){return '/api/tvs';}
 function streamUrl(id){return '/hls/tv'+encodeURIComponent(id)+'/index.m3u8';}
+function selectorVisible(){return overlay.className.indexOf('hidden')===-1;}
 
 function showOverlay(message){
   overlay.className='overlay';
@@ -40,7 +41,7 @@ function showToast(message){
 
 function loadTvs(forceSelector){
   title.innerHTML='Choisir cette télévision';
-  subtitle.innerHTML='Chargement de la liste depuis le serveur…';
+  subtitle.innerHTML='Déplace la souris sur la télévision voulue puis clique dessus.';
   status.innerHTML='';
   showOverlay();
 
@@ -95,7 +96,7 @@ function showLoadError(message,forceSelector){
 
 function renderSelector(savedId){
   list.innerHTML='';
-  subtitle.innerHTML='Utilise ▲ ▼ puis OK pour choisir cet écran.';
+  subtitle.innerHTML='Souris + clic gauche pour choisir. Les flèches ▲ ▼ + OK restent aussi disponibles.';
   selectedIndex=0;
 
   for(var i=0;i<tvs.length;i++){
@@ -118,10 +119,19 @@ function renderSelector(savedId){
     row.appendChild(id);
 
     row.onclick=(function(index){
+      return function(event){
+        selectedIndex=index;
+        updateSelection(false);
+        confirmSelection();
+        if(event) cancelMouse(event);
+        return false;
+      };
+    })(i);
+
+    row.onmouseover=(function(index){
       return function(){
         selectedIndex=index;
-        updateSelection();
-        confirmSelection();
+        updateSelection(false);
       };
     })(i);
 
@@ -135,7 +145,7 @@ function renderSelector(savedId){
     list.appendChild(row);
   }
 
-  updateSelection(true);
+  updateSelection(false);
 }
 
 function escapeHtml(value){
@@ -159,7 +169,7 @@ function updateSelection(moveFocus){
 
   var current=rows[selectedIndex];
   if(current){
-    if(moveFocus!==false&&current.focus){
+    if(moveFocus===true&&current.focus){
       try{current.focus();}catch(e){}
     }
     if(current.scrollIntoView){
@@ -193,8 +203,8 @@ function startTv(tv){
 
   try{
     var promise=player.play();
-    if(promise&&promise.catch){promise.catch(function(){showToast('Appuie sur OK pour démarrer la vidéo.');});}
-  }catch(e4){showToast('Appuie sur OK pour démarrer la vidéo.');}
+    if(promise&&promise.catch){promise.catch(function(){showToast('Clique une fois pour démarrer la vidéo.');});}
+  }catch(e4){showToast('Clique une fois pour démarrer la vidéo.');}
 }
 
 function resumeCurrentTv(){
@@ -217,6 +227,7 @@ function recoverPlayback(){
 }
 
 function openSelector(){
+  if(selectorVisible()) return;
   clearTimeout(retryTimer);
   try{player.pause();}catch(e){}
   loadTvs(true);
@@ -226,6 +237,37 @@ player.addEventListener('error',function(){showToast('Flux interrompu - reconnex
 player.addEventListener('ended',recoverPlayback,false);
 player.addEventListener('stalled',recoverPlayback,false);
 
+// Mode principal sur cette TV WELCOME : souris.
+// Pendant la vidéo, un clic gauche n'importe où rouvre le choix des télévisions.
+document.addEventListener('mousedown',function(event){
+  event=event||window.event||{};
+  var button=(event.button===undefined)?0:event.button;
+  if(!selectorVisible()&&button===0){
+    openSelector();
+    cancelMouse(event);
+    return false;
+  }
+  return true;
+},true);
+
+// Fallback si le navigateur VIDAA génère seulement un événement click.
+player.addEventListener('click',function(event){
+  if(!selectorVisible()){
+    openSelector();
+    cancelMouse(event);
+  }
+  return false;
+},false);
+
+function cancelMouse(event){
+  if(!event) return;
+  if(event.preventDefault) event.preventDefault();
+  if(event.stopPropagation) event.stopPropagation();
+  event.cancelBubble=true;
+  event.returnValue=false;
+}
+
+// Navigation télécommande conservée en bonus pour tester Haut/Bas + OK.
 function normalizeKey(event){
   event=event||window.event||{};
   var key=event.key||event.keyIdentifier||'';
@@ -239,36 +281,20 @@ function normalizeKey(event){
   if(key==='Enter'||key==='OK'||key==='Select'||physical==='Enter'||physical==='NumpadEnter') return 'ok';
   if(key==='Backspace'||key==='Escape'||key==='BrowserBack'||key==='GoBack') return 'back';
 
-  // Mapping VIDAA documenté.
-  if(code===38) return 'up';
-  if(code===40) return 'down';
-  if(code===37) return 'left';
-  if(code===39) return 'right';
-  if(code===13||code===32) return 'ok';
-  if(code===8) return 'back';
+  if(code===38||code===103||code===29460) return 'up';
+  if(code===40||code===108||code===29461) return 'down';
+  if(code===37||code===105||code===4) return 'left';
+  if(code===39||code===106||code===5) return 'right';
+  if(code===13||code===32||code===29443) return 'ok';
+  if(code===8||code===461||code===27||code===10009||code===166) return 'back';
 
-  // Variantes observées sur certains moteurs Hisense/Linux OEM.
-  if(code===103||code===29460) return 'up';
-  if(code===108||code===29461) return 'down';
-  if(code===105||code===4) return 'left';
-  if(code===106||code===5) return 'right';
-  if(code===29443) return 'ok';
-
-  // Retour / HbbTV / plateformes OEM.
-  if(code===461||code===27||code===10009||code===166) return 'back';
-  if(code===403) return 'red';
-  if(code===404) return 'green';
-  if(code===405) return 'yellow';
-  if(code===406) return 'blue';
-
-  return 'unknown:'+code+':'+key+':'+physical;
+  return 'unknown';
 }
 
 function handleRemoteKey(event){
   var action=normalizeKey(event);
   var now=new Date().getTime();
 
-  // Certains firmwares envoient le même événement à plusieurs niveaux.
   if(action===lastHandledKey&&(now-lastHandledAt)<100){
     cancelKey(event);
     return false;
@@ -276,16 +302,14 @@ function handleRemoteKey(event){
   lastHandledKey=action;
   lastHandledAt=now;
 
-  var selectorVisible=overlay.className.indexOf('hidden')===-1;
-
-  if(selectorVisible&&action==='up'){
+  if(selectorVisible()&&action==='up'){
     selectedIndex--;
     updateSelection(true);
     cancelKey(event);
     return false;
   }
 
-  if(selectorVisible&&action==='down'){
+  if(selectorVisible()&&action==='down'){
     selectedIndex++;
     updateSelection(true);
     cancelKey(event);
@@ -293,7 +317,7 @@ function handleRemoteKey(event){
   }
 
   if(action==='ok'){
-    if(selectorVisible) confirmSelection();
+    if(selectorVisible()) confirmSelection();
     else{
       try{if(player.paused)player.play();}catch(e){}
     }
@@ -301,36 +325,20 @@ function handleRemoteKey(event){
     return false;
   }
 
-  if(action==='red'){
-    if(!selectorVisible) openSelector();
-    else if(currentTvId) resumeCurrentTv();
-    cancelKey(event);
-    return false;
-  }
-
   if(action==='back'){
-    if(!selectorVisible){
-      // Pendant la lecture : Retour ouvre le choix des écrans.
+    if(!selectorVisible()){
       openSelector();
       cancelKey(event);
       return false;
     }
 
     if(currentTvId){
-      // Dans le sélecteur avec une TV déjà active : Retour annule le changement.
       resumeCurrentTv();
       cancelKey(event);
       return false;
     }
 
-    // Au tout premier lancement, aucune TV n'est encore choisie.
-    // Ne PAS avaler Retour : le navigateur/VIDAA peut revenir à l'écran précédent.
-    try{window.close();}catch(e2){}
     return true;
-  }
-
-  if(selectorVisible&&action.indexOf('unknown:')===0){
-    status.innerHTML='Touche reçue : '+escapeHtml(action.substring(8));
   }
 
   return true;
@@ -344,8 +352,6 @@ function cancelKey(event){
   event.returnValue=false;
 }
 
-// VIDAA documente la navigation sur document.keydown.
-// On écoute aussi keyup et window pour couvrir les firmwares OEM WELCOME.
 document.addEventListener('keydown',handleRemoteKey,true);
 document.addEventListener('keyup',handleRemoteKey,true);
 document.addEventListener('keypress',handleRemoteKey,true);
@@ -353,15 +359,10 @@ window.addEventListener('keydown',handleRemoteKey,true);
 window.addEventListener('keyup',handleRemoteKey,true);
 
 document.addEventListener('visibilitychange',function(){
-  if(!document.hidden&&currentTvId&&overlay.className.indexOf('hidden')!==-1){
+  if(!document.hidden&&currentTvId&&!selectorVisible()){
     try{player.play();}catch(e){}
   }
 },false);
-
-try{
-  document.body.setAttribute('tabindex','-1');
-  document.body.focus();
-}catch(e){}
 
 loadTvs(false);
 })();
