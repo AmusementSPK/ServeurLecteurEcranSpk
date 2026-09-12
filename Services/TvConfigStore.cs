@@ -64,7 +64,7 @@ public sealed class TvConfigStore
             {
                 Id = id,
                 Name = NormalizeName(requestedName, $"TV {id}"),
-                FileName = $"tv{id}.mp4"
+                FileName = $"tv{id}/tv{id}.mp4"
             };
 
             _tvs.Add(tv);
@@ -81,6 +81,23 @@ public sealed class TvConfigStore
                 ?? throw new KeyNotFoundException("Télévision introuvable.");
 
             tv.Name = NormalizeName(requestedName, $"TV {tv.Id}");
+            SaveLocked();
+            return Clone(tv);
+        }
+    }
+
+    public TvDefinition SetMediaFile(string id, string relativeFileName)
+    {
+        lock (_gate)
+        {
+            var tv = _tvs.FirstOrDefault(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
+                ?? throw new KeyNotFoundException("Télévision introuvable.");
+
+            var normalizedPath = NormalizeMediaPath(relativeFileName);
+            if (!IsValidMediaPath(normalizedPath))
+                throw new InvalidOperationException("Nom de fichier média invalide.");
+
+            tv.FileName = normalizedPath;
             SaveLocked();
             return Clone(tv);
         }
@@ -129,7 +146,7 @@ public sealed class TvConfigStore
                 {
                     Id = x.Key,
                     Name = $"TV {x.Key}",
-                    FileName = Path.GetFileName(x.Value)
+                    FileName = NormalizeMediaPath(x.Value)
                 })
                 .Where(IsValid)
                 .ToList();
@@ -157,8 +174,7 @@ public sealed class TvConfigStore
     {
         return int.TryParse(tv.Id, out var id) &&
                id > 0 &&
-               !string.IsNullOrWhiteSpace(tv.FileName) &&
-               Path.GetFileName(tv.FileName) == tv.FileName;
+               IsValidMediaPath(NormalizeMediaPath(tv.FileName));
     }
 
     private static TvDefinition Normalize(TvDefinition tv)
@@ -168,8 +184,31 @@ public sealed class TvConfigStore
         {
             Id = id,
             Name = NormalizeName(tv.Name, $"TV {id}"),
-            FileName = Path.GetFileName(tv.FileName)
+            FileName = NormalizeMediaPath(tv.FileName)
         };
+    }
+
+    private static string NormalizeMediaPath(string? value)
+    {
+        return (value ?? "")
+            .Trim()
+            .Replace('\\', '/')
+            .TrimStart('/');
+    }
+
+    private static bool IsValidMediaPath(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || Path.IsPathRooted(value))
+            return false;
+
+        var parts = value.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0 || parts.Any(x => x is "." or ".."))
+            return false;
+
+        if (!Path.GetExtension(parts[^1]).Equals(".mp4", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return parts.All(part => part.IndexOfAny(Path.GetInvalidFileNameChars()) < 0);
     }
 
     private static string NormalizeName(string? value, string fallback)
