@@ -22,6 +22,7 @@ builder.WebHost.ConfigureKestrel(options =>
 
 builder.Services.AddSingleton<TvConfigStore>();
 builder.Services.AddSingleton<HlsProcessManager>();
+builder.Services.AddSingleton<VideoNormalizer>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HlsProcessManager>());
 
 var app = builder.Build();
@@ -36,7 +37,7 @@ Directory.CreateDirectory(mediaRoot);
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-// Flux HLS utilisés par les Roku. La convention d'URL reste inchangée.
+// Flux HLS utilisés par les Roku / VIDAA. La convention d'URL reste inchangée.
 var hlsContentTypes = new FileExtensionContentTypeProvider();
 hlsContentTypes.Mappings[".m3u8"] = "application/vnd.apple.mpegurl";
 hlsContentTypes.Mappings[".ts"] = "video/mp2t";
@@ -64,7 +65,6 @@ app.MapGet("/health", (HlsProcessManager manager) => Results.Ok(new
 }));
 
 // Route de diagnostic compatible avec l'ancien serveur.
-// L'application Roku utilise directement /hls/tvX/index.m3u8.
 app.MapGet("/tv/{tvId}", (string tvId, TvConfigStore store) =>
 {
     var tv = store.Get(tvId);
@@ -81,8 +81,7 @@ app.MapGet("/tv/{tvId}", (string tvId, TvConfigStore store) =>
     });
 });
 
-// Contrat volontairement minimal et stable pour l'application Roku.
-// La liste provient de Data/tvs.json : aucun nombre de TV n'est codé dans l'app Roku.
+// Contrat minimal et stable pour l'application Roku.
 app.MapGet("/api/roku/tvs", (TvConfigStore store) =>
 {
     var televisions = store.GetAll().Select(tv => new
@@ -115,10 +114,7 @@ app.MapGet("/api/tvs", (TvConfigStore store, HlsProcessManager manager) =>
         };
     });
 
-    return Results.Ok(new
-    {
-        televisions = items
-    });
+    return Results.Ok(new { televisions = items });
 });
 
 app.MapPost("/api/tvs", (CreateTvRequest request, TvConfigStore store) =>
@@ -150,7 +146,8 @@ app.MapPost("/api/tvs/{tvId}/video", async (
     string tvId,
     HttpRequest request,
     TvConfigStore store,
-    HlsProcessManager manager) =>
+    HlsProcessManager manager,
+    VideoNormalizer normalizer) =>
 {
     var tv = store.Get(tvId);
     if (tv is null)
@@ -159,14 +156,25 @@ app.MapPost("/api/tvs/{tvId}/video", async (
     if (!request.HasFormContentType)
         return Results.BadRequest(new { error = "Le fichier vidéo est manquant." });
 
-    var form = await request.ReadFormAsync();
+    var form = await request.ReadFormAsync(request.HttpContext.RequestAborted);
     var file = form.Files.GetFile("video") ?? form.Files.FirstOrDefault();
 
     if (file is null || file.Length == 0)
         return Results.BadRequest(new { error = "Le fichier vidéo est vide." });
 
-    if (!Path.GetExtension(file.FileName).Equals(".mp4", StringComparison.OrdinalIgnoreCase))
-        return Results.BadRequest(new { error = "Seuls les fichiers MP4 sont acceptés." });
+    var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+    var allowedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".mpeg", ".mpg"
+    };
+
+    if (!allowedExtensions.Contains(extension))
+    {
+        return Results.BadRequest(new
+        {
+            error = "Format non supporté. Utilise MP4, MOV, M4V, MKV, WEBM, AVI, MPEG ou MPG."
+        });
+    }
 
     var targetName = Path.GetFileName(tv.FileName);
     var targetPath = Path.GetFullPath(Path.Combine(mediaRoot, targetName));
@@ -174,21 +182,37 @@ app.MapPost("/api/tvs/{tvId}/video", async (
     if (!targetPath.StartsWith(mediaRoot, StringComparison.OrdinalIgnoreCase))
         return Results.BadRequest(new { error = "Chemin vidéo invalide." });
 
-    var tempPath = Path.Combine(mediaRoot, $".upload-{tv.Id}-{Guid.NewGuid():N}.tmp");
+    // On conserve l'ancienne vidéo en diffusion pendant l'upload ET la conversion.
+    // Le flux n'est arrêté que quelques instants au moment du remplacement final.
+    var uploadTempPath = Path.Combine(
+        mediaRoot,
+        $".upload-{tv.Id}-{Guid.NewGuid():N}{extension}");
+    var normalizedTempPath = Path.Combine(
+        mediaRoot,
+        $".normalized-{tv.Id}-{Guid.NewGuid():N}.mp4");
+
+    var streamWasStopped = false;
 
     try
     {
-        await using (var output = File.Create(tempPath))
+        await using (var output = File.Create(uploadTempPath))
         {
-            await file.CopyToAsync(output);
+            await file.CopyToAsync(output, request.HttpContext.RequestAborted);
         }
 
-        // Arrête seulement cette TV pendant le remplacement du fichier.
-        manager.Stop(tv.Id);
-        File.Move(tempPath, targetPath, overwrite: true);
+        // Tous les ordinateurs peuvent envoyer leur fichier tel quel.
+        // Le serveur le convertit lui-même vers le format vidéo de référence SPK.
+        await normalizer.NormalizeAsync(
+            uploadTempPath,
+            normalizedTempPath,
+            request.HttpContext.RequestAborted);
 
-        // L'URL HLS ne change jamais; le flux repart avec la nouvelle vidéo.
+        manager.Stop(tv.Id);
+        streamWasStopped = true;
+
+        File.Move(normalizedTempPath, targetPath, overwrite: true);
         manager.Restart(tv.Id);
+        streamWasStopped = false;
 
         var info = new FileInfo(targetPath);
         return Results.Ok(new
@@ -197,20 +221,46 @@ app.MapPost("/api/tvs/{tvId}/video", async (
             tv = tv.Id,
             name = tv.Name,
             fileName = tv.FileName,
+            originalFileName = Path.GetFileName(file.FileName),
             size = info.Length,
+            normalized = true,
             streamUrl = $"/hls/tv{tv.Id}/index.m3u8"
         });
     }
+    catch (OperationCanceledException)
+    {
+        if (streamWasStopped)
+            manager.Restart(tv.Id);
+
+        return Results.Problem(
+            title: "Envoi annulé.",
+            statusCode: StatusCodes.Status499ClientClosedRequest);
+    }
     catch (Exception ex)
     {
-        if (File.Exists(tempPath))
-            File.Delete(tempPath);
+        if (streamWasStopped)
+            manager.Restart(tv.Id);
 
-        manager.Restart(tv.Id);
         return Results.Problem(
-            title: "Impossible de remplacer la vidéo.",
+            title: "Impossible de préparer la vidéo.",
             detail: ex.Message,
             statusCode: StatusCodes.Status500InternalServerError);
+    }
+    finally
+    {
+        try
+        {
+            if (File.Exists(uploadTempPath))
+                File.Delete(uploadTempPath);
+        }
+        catch { }
+
+        try
+        {
+            if (File.Exists(normalizedTempPath))
+                File.Delete(normalizedTempPath);
+        }
+        catch { }
     }
 });
 
