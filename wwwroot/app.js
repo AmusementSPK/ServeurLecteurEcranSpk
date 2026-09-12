@@ -12,7 +12,7 @@ function showMessage(text, type = 'ok') {
 }
 
 function formatBytes(bytes) {
-    if (!bytes) return 'Aucune vidéo';
+    if (!bytes) return 'Aucun média';
     const units = ['o', 'Ko', 'Mo', 'Go'];
     let value = bytes;
     let unit = 0;
@@ -64,7 +64,7 @@ function render() {
         card.className = 'tv-card';
 
         let statusClass = 'missing';
-        let statusText = 'Pas de vidéo';
+        let statusText = 'Pas de média';
         if (tv.hasVideo && tv.running) {
             statusClass = 'running';
             statusText = 'En diffusion';
@@ -87,17 +87,17 @@ function render() {
             </div>
             <div class="video-box">
                 <div class="video-meta">
-                    <strong>Vidéo actuelle :</strong> ${escapeHtml(tv.fileName)}<br>
+                    <strong>Média actuel :</strong> ${escapeHtml(tv.fileName)}<br>
                     ${tv.hasVideo
-                        ? `${formatBytes(tv.fileSize)}${tv.lastModified ? ` · modifiée ${new Date(tv.lastModified).toLocaleString('fr-CA')}` : ''}`
-                        : 'Aucun fichier vidéo pour cette TV'}
+                        ? `${formatBytes(tv.fileSize)}${tv.lastModified ? ` · modifié ${new Date(tv.lastModified).toLocaleString('fr-CA')}` : ''}`
+                        : 'Aucun média pour cette TV'}
                 </div>
 
                 <input
                     class="file-input hidden"
                     id="file-${escapeHtml(tv.id)}"
                     type="file"
-                    accept="video/*,.mp4,.mov,.m4v,.mkv,.webm,.avi,.mpeg,.mpg">
+                    accept="video/*,image/*,.mp4,.mov,.m4v,.mkv,.webm,.avi,.mpeg,.mpg,.wmv,.flv,.mts,.m2ts,.3gp,.jpg,.jpeg,.png,.webp,.bmp,.gif,.tif,.tiff,.avif,.heic,.heif,.jfif">
 
                 <div class="file-row">
                     <button class="secondary choose-video" data-tv="${escapeAttr(tv.id)}">Choisir / changer le fichier</button>
@@ -165,12 +165,14 @@ function bindCardEvents() {
 
             label.textContent = `${file.name} · ${formatBytes(file.size)}`;
             uploadButton.disabled = false;
-            uploadState.textContent = 'Prêt à envoyer.';
+            uploadState.textContent = file.type && file.type.startsWith('image/')
+                ? 'Prêt à envoyer. L’image sera transformée en MP4 fixe de 10 secondes.'
+                : 'Prêt à envoyer. Le serveur préparera automatiquement le fichier.';
         });
     });
 
     document.querySelectorAll('.upload-video').forEach(button =>
-        button.addEventListener('click', () => uploadVideo(button.dataset.tv)));
+        button.addEventListener('click', () => uploadMedia(button.dataset.tv)));
 
     document.querySelectorAll('.copy-url').forEach(button => {
         button.addEventListener('click', async () => {
@@ -184,18 +186,12 @@ function bindCardEvents() {
     });
 }
 
-function uploadVideo(id) {
+function uploadMedia(id) {
     if (state.uploading.has(id)) return;
 
     const input = document.getElementById(`file-${id}`);
     const file = input.files && input.files[0];
-    if (!file) return showMessage('Choisis d’abord un fichier vidéo.', 'error');
-
-    const allowed = ['.mp4', '.mov', '.m4v', '.mkv', '.webm', '.avi', '.mpeg', '.mpg'];
-    const lowerName = file.name.toLowerCase();
-    if (!allowed.some(ext => lowerName.endsWith(ext))) {
-        return showMessage('Format non supporté. Utilise MP4, MOV, M4V, MKV, WEBM, AVI, MPEG ou MPG.', 'error');
-    }
+    if (!file) return showMessage('Choisis d’abord un fichier.', 'error');
 
     const form = new FormData();
     form.append('video', file, file.name);
@@ -226,10 +222,10 @@ function uploadVideo(id) {
 
     xhr.upload.onload = () => {
         bar.style.width = '100%';
-        uploadState.textContent = 'Fichier reçu. Conversion automatique pour les télés en cours…';
+        uploadState.textContent = 'Fichier reçu. Conversion automatique en MP4 en cours…';
     };
 
-    xhr.onload = async () => {
+    xhr.onload = () => {
         let data = {};
         try { data = JSON.parse(xhr.responseText); } catch {}
 
@@ -237,8 +233,8 @@ function uploadVideo(id) {
         chooseButton.disabled = false;
 
         if (xhr.status >= 200 && xhr.status < 300) {
-            uploadState.textContent = 'Conversion terminée. Nouvelle vidéo en diffusion.';
-            showMessage(`TV ${id} : vidéo convertie et mise en ligne.`);
+            uploadState.textContent = `Terminé : ${data.fileName || 'média.mp4'} est maintenant en diffusion.`;
+            showMessage(`TV ${id} : ${data.fileName || 'le média'} est maintenant en ligne.`);
             input.value = '';
             document.getElementById(`selected-file-${id}`).textContent = 'Aucun fichier choisi';
 
@@ -251,7 +247,7 @@ function uploadVideo(id) {
             uploadButton.disabled = false;
             wrap.style.display = 'none';
             uploadState.textContent = 'Échec de la conversion ou de l’envoi.';
-            showMessage(data.error || data.detail || data.title || 'Échec de l’envoi vidéo.', 'error');
+            showMessage(data.error || data.detail || data.title || 'Échec de l’envoi du média.', 'error');
         }
     };
 
