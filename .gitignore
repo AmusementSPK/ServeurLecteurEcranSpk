@@ -6,3 +6,4 @@ Data/tvs.json
 Data/*.tmp
 Media/*
 !Media/.gitkeep
+Logs/
