@@ -11,6 +11,14 @@ builder.WebHost.UseUrls("http://0.0.0.0:8090");
 builder.Services.Configure<StreamingOptions>(
     builder.Configuration.GetSection("Streaming"));
 
+builder.Services.Configure<HostOptions>(options =>
+{
+    // Dernière ligne de défense : une exception d'un BackgroundService ne doit pas
+    // faire tomber le serveur web. Le heartbeat /health permettra au watchdog
+    // Windows de détecter un gestionnaire HLS mort et de redémarrer proprement.
+    options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore;
+});
+
 const long maxUploadBytes = 2L * 1024 * 1024 * 1024;
 builder.Services.Configure<FormOptions>(options =>
 {
@@ -96,13 +104,23 @@ app.UseStaticFiles(new StaticFileOptions
     }
 });
 
-app.MapGet("/health", (HlsProcessManager manager) => Results.Ok(new
+app.MapGet("/health", (HlsProcessManager manager) =>
 {
-    status = "OK",
-    mode = "SERVER_SIDE_LOOP_HLS",
-    time = DateTimeOffset.Now,
-    streams = manager.GetStatus()
-}));
+    var healthy = manager.IsSupervisorHealthy;
+    var payload = new
+    {
+        status = healthy ? "OK" : "DEGRADED",
+        mode = "SERVER_SIDE_LOOP_HLS",
+        time = DateTimeOffset.Now,
+        hlsSupervisorHealthy = healthy,
+        hlsLastMaintenanceUtc = manager.LastMaintenanceUtc,
+        streams = manager.GetStatus()
+    };
+
+    return healthy
+        ? Results.Ok(payload)
+        : Results.Json(payload, statusCode: StatusCodes.Status503ServiceUnavailable);
+});
 
 app.MapGet("/tv/{tvId}", (string tvId, TvConfigStore store) =>
 {
