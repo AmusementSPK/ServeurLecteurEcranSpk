@@ -1,18 +1,20 @@
 @echo off
-title SPK Roku HLS + Administration Web
+title SPK Roku HLS + Administration Web - MODE MANUEL
 cd /d "%~dp0"
 
 echo ===============================================
 echo       SPK ROKU HLS + ADMINISTRATION WEB
+echo                MODE MANUEL
 echo ===============================================
+echo.
+echo Ce fichier sert aux tests et a la maintenance.
+echo Pour le fonctionnement permanent, utilise :
+echo   4_INSTALLER_DEMARRAGE_AUTO.bat
 echo.
 echo Interface : http://localhost:8090/
 echo Sante     : http://localhost:8090/health
 echo.
-echo Les Roku continuent d'utiliser :
-echo http://IP_DU_SERVEUR:8090/hls/tv1/index.m3u8
-echo.
-echo CTRL+C pour arreter.
+echo CTRL+C pour arreter ce lancement manuel.
 echo ===============================================
 echo.
 
