@@ -29,6 +29,24 @@ function Test-Health {
     }
 }
 
+function Stop-StaleSpkOnPort {
+    try {
+        $connections = Get-NetTCPConnection -LocalPort 8090 -State Listen -ErrorAction SilentlyContinue
+        foreach ($connection in $connections) {
+            $pidToCheck = $connection.OwningProcess
+            $procInfo = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $pidToCheck) -ErrorAction SilentlyContinue
+
+            if ($null -ne $procInfo -and $procInfo.CommandLine -match "SPK\.Streaming") {
+                Write-WatchdogLog ("Arret de l ancienne instance SPK bloquee. PID=" + $pidToCheck)
+                & taskkill.exe /PID $pidToCheck /T /F | Out-Null
+            }
+        }
+    }
+    catch {
+        Write-WatchdogLog ("Impossible de nettoyer le port 8090 : " + $_.Exception.Message)
+    }
+}
+
 function Test-BuildRequired {
     if (-not (Test-Path $Dll)) { return $true }
     try {
@@ -95,6 +113,7 @@ try {
             Write-WatchdogLog "Une instance saine existe deja sur le port 8090. Surveillance sans doublon."
             while (Test-Health) { Start-Sleep -Seconds 10 }
             Write-WatchdogLog "L instance existante ne repond plus. Prise en charge par le watchdog."
+            Stop-StaleSpkOnPort
             Start-Sleep -Seconds 3
             continue
         }
