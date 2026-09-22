@@ -61,13 +61,31 @@ Conséquences :
 Le fichier Roku config/server.env contient seulement l'adresse IP et le port du serveur.
 
 
-INSTALLATION
-------------
+INSTALLATION - SERVEUR PERMANENT
+--------------------------------
 1. Installer .NET 10 SDK.
 2. Lancer 0_INSTALLER_FFMPEG.bat si FFmpeg n'est pas déjà installé.
 3. Lancer 1_AUTORISER_PARE_FEU.bat comme administrateur.
-4. Lancer 3_DEMARRER_SERVEUR.bat.
+4. Faire CLIC DROIT > Executer en tant qu'administrateur sur :
+       4_INSTALLER_DEMARRAGE_AUTO.bat
 5. Ouvrir : http://localhost:8090/
+
+Le serveur est ensuite lancé sous le compte SYSTEM au démarrage de Windows.
+Aucune session utilisateur n'a besoin d'être ouverte.
+
+Protection automatique :
+- FFmpeg arrêté/crashé : relance automatique par le serveur;
+- erreur dans la boucle HLS : isolée pour ne pas faire tomber le serveur web;
+- serveur .NET crashé : relance par SPK_Server_Watchdog.ps1;
+- serveur figé / health invalide : arrêt forcé après 3 contrôles ratés puis relance;
+- watchdog arrêté : le Planificateur Windows tente de le relancer;
+- redémarrage Windows : démarrage automatique;
+- double lancement : bloqué par mutex + règle IgnoreNew;
+- logs conservés dans Logs/ (rotation des logs serveur après 30 jours).
+
+3_DEMARRER_SERVEUR.bat reste disponible uniquement pour les tests/maintenance.
+6_ETAT_SERVEUR.bat affiche l'état de la tâche Windows et de /health.
+5_DESINSTALLER_DEMARRAGE_AUTO.bat retire le démarrage automatique.
 
 
 CONFIGURATION DES TV
