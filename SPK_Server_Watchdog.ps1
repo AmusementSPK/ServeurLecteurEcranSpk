@@ -9,6 +9,8 @@ $Logs = Join-Path $Root "Logs"
 $Project = Join-Path $Root "SPK.Streaming.csproj"
 $Dll = Join-Path $Root "bin\Release\net10.0\SPK.Streaming.dll"
 $HealthUrl = "http://127.0.0.1:8090/health"
+$LocalDotnet = Join-Path $Root ".spk-tools\dotnet\dotnet.exe"
+$LocalFfmpeg = Join-Path $Root ".spk-tools\ffmpeg\bin\ffmpeg.exe"
 
 New-Item -ItemType Directory -Force -Path $Logs | Out-Null
 $WatchdogLog = Join-Path $Logs "watchdog.log"
@@ -45,6 +47,20 @@ function Stop-StaleSpkOnPort {
     catch {
         Write-WatchdogLog ("Impossible de nettoyer le port 8090 : " + $_.Exception.Message)
     }
+}
+
+function Resolve-Dotnet {
+    if (Test-Path $LocalDotnet) { return $LocalDotnet }
+    $command = Get-Command dotnet -ErrorAction SilentlyContinue
+    if ($null -ne $command) { return $command.Source }
+    return $null
+}
+
+function Resolve-Ffmpeg {
+    if (Test-Path $LocalFfmpeg) { return $LocalFfmpeg }
+    $command = Get-Command ffmpeg -ErrorAction SilentlyContinue
+    if ($null -ne $command) { return $command.Source }
+    return $null
 }
 
 function Test-BuildRequired {
@@ -92,19 +108,26 @@ try {
     Write-WatchdogLog "Watchdog SPK demarre."
     while ($true) {
         Remove-OldLogs
-        $dotnetCommand = Get-Command dotnet -ErrorAction SilentlyContinue
-        if ($null -eq $dotnetCommand) {
-            Write-WatchdogLog "ERREUR : dotnet introuvable. Nouvelle tentative dans 30 secondes."
+        $dotnetPath = Resolve-Dotnet
+        if ([string]::IsNullOrWhiteSpace($dotnetPath)) {
+            Write-WatchdogLog "ERREUR : dotnet introuvable. Lance INSTALLER_SPK.bat."
             Start-Sleep -Seconds 30
             continue
         }
-        $ffmpegCommand = Get-Command ffmpeg -ErrorAction SilentlyContinue
-        if ($null -eq $ffmpegCommand) {
-            Write-WatchdogLog "ERREUR : FFmpeg introuvable. Nouvelle tentative dans 30 secondes."
+
+        $ffmpegPath = Resolve-Ffmpeg
+        if ([string]::IsNullOrWhiteSpace($ffmpegPath)) {
+            Write-WatchdogLog "ERREUR : FFmpeg introuvable. Lance INSTALLER_SPK.bat."
             Start-Sleep -Seconds 30
             continue
         }
-        if (-not (Ensure-ReleaseBuild $dotnetCommand.Source)) {
+
+        # ASP.NET Core lit cette variable comme Streaming:FfmpegPath.
+        # Le processus enfant hérite de l'environnement du watchdog.
+        $env:Streaming__FfmpegPath = $ffmpegPath
+        $env:DOTNET_ROOT = Split-Path -Parent $dotnetPath
+
+        if (-not (Ensure-ReleaseBuild $dotnetPath)) {
             Start-Sleep -Seconds 30
             continue
         }
@@ -123,7 +146,7 @@ try {
         $stderr = Join-Path $Logs ("server-" + $stamp + ".err.log")
 
         try {
-            $process = Start-Process -FilePath $dotnetCommand.Source -ArgumentList @($Dll) -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+            $process = Start-Process -FilePath $dotnetPath -ArgumentList @($Dll) -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
         }
         catch {
             Write-WatchdogLog ("ERREUR au lancement du serveur : " + $_.Exception.Message)
