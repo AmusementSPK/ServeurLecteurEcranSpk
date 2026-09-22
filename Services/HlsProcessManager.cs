@@ -10,6 +10,8 @@ public sealed class HlsProcessManager : BackgroundService
     private readonly Dictionary<string, Process> _processes =
         new(StringComparer.OrdinalIgnoreCase);
 
+    private DateTimeOffset _lastMaintenanceUtc = DateTimeOffset.UtcNow;
+
     public HlsProcessManager(
         ILogger<HlsProcessManager> logger,
         IOptions<StreamingOptions> options,
@@ -22,12 +24,36 @@ public sealed class HlsProcessManager : BackgroundService
         _store = store;
     }
 
+    public DateTimeOffset LastMaintenanceUtc => _lastMaintenanceUtc;
+
+    public bool IsSupervisorHealthy =>
+        DateTimeOffset.UtcNow - _lastMaintenanceUtc < TimeSpan.FromSeconds(20);
+
     public bool IsRunning(string tvId)
     {
+        Process? stale = null;
+
         lock (_processes)
         {
-            return _processes.TryGetValue(tvId, out var p) && !p.HasExited;
+            if (!_processes.TryGetValue(tvId, out var process))
+                return false;
+
+            try
+            {
+                if (!process.HasExited)
+                    return true;
+            }
+            catch
+            {
+                // Le processus est invalide/disposé : il sera nettoyé puis recréé.
+            }
+
+            _processes.Remove(tvId);
+            stale = process;
         }
+
+        try { stale?.Dispose(); } catch { }
+        return false;
     }
 
     public void Stop(string tvId)
@@ -50,13 +76,13 @@ public sealed class HlsProcessManager : BackgroundService
         return _store.GetAll()
             .Select(tv =>
             {
-                var path = Path.Combine(mediaRoot, tv.FileName);
+                var path = SafeResolveMediaPath(mediaRoot, tv.FileName);
                 return new
                 {
                     tv = tv.Id,
                     name = tv.Name,
                     file = tv.FileName,
-                    hasVideo = File.Exists(path),
+                    hasVideo = path is not null && File.Exists(path),
                     running = IsRunning(tv.Id),
                     stream = $"/hls/tv{tv.Id}/index.m3u8"
                 };
@@ -66,13 +92,29 @@ public sealed class HlsProcessManager : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("SPK HLS: démarrage du gestionnaire FFmpeg.");
-        EnsureConfiguredStreams();
+        _logger.LogInformation("SPK HLS: démarrage du gestionnaire FFmpeg résilient.");
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
-            EnsureConfiguredStreams();
+            try
+            {
+                EnsureConfiguredStreams();
+                _lastMaintenanceUtc = DateTimeOffset.UtcNow;
+            }
+            catch (Exception ex)
+            {
+                // Une erreur de surveillance HLS ne doit JAMAIS faire tomber le serveur web.
+                _logger.LogError(ex, "SPK HLS: erreur dans la boucle de surveillance. Nouvelle tentative dans 3 secondes.");
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 
@@ -82,12 +124,20 @@ public sealed class HlsProcessManager : BackgroundService
 
         foreach (var tv in _store.GetAll())
         {
-            var input = Path.Combine(mediaRoot, tv.FileName);
-            if (!File.Exists(input))
-                continue;
+            try
+            {
+                var input = SafeResolveMediaPath(mediaRoot, tv.FileName);
+                if (input is null || !File.Exists(input))
+                    continue;
 
-            if (!IsRunning(tv.Id))
-                TryStart(tv);
+                if (!IsRunning(tv.Id))
+                    TryStart(tv);
+            }
+            catch (Exception ex)
+            {
+                // Une TV problématique ne doit jamais empêcher les autres de continuer.
+                _logger.LogError(ex, "TV {TvId}: erreur de surveillance du flux.", tv.Id);
+            }
         }
     }
 
@@ -103,8 +153,8 @@ public sealed class HlsProcessManager : BackgroundService
             Directory.CreateDirectory(mediaRoot);
             Directory.CreateDirectory(hlsRoot);
 
-            var input = Path.GetFullPath(Path.Combine(mediaRoot, tv.FileName));
-            if (!input.StartsWith(mediaRoot, StringComparison.OrdinalIgnoreCase))
+            var input = SafeResolveMediaPath(mediaRoot, tv.FileName);
+            if (input is null)
             {
                 _logger.LogError("Chemin invalide pour TV {TvId}.", tv.Id);
                 return;
@@ -140,7 +190,6 @@ public sealed class HlsProcessManager : BackgroundService
                 RedirectStandardOutput = true
             };
 
-            // Système global conservé : boucle côté serveur, flux HLS live vers Roku.
             psi.ArgumentList.Add("-hide_banner");
             psi.ArgumentList.Add("-loglevel");
             psi.ArgumentList.Add("warning");
@@ -187,7 +236,7 @@ public sealed class HlsProcessManager : BackgroundService
             process.Exited += (_, _) =>
             {
                 _logger.LogWarning(
-                    "FFmpeg TV {TvId} s'est arrêté (code {ExitCode}).",
+                    "FFmpeg TV {TvId} s'est arrêté (code {ExitCode}). Redémarrage automatique au prochain cycle.",
                     tv.Id,
                     SafeExitCode(process));
             };
@@ -195,6 +244,7 @@ public sealed class HlsProcessManager : BackgroundService
             if (!process.Start())
             {
                 _logger.LogError("Impossible de démarrer FFmpeg pour TV {TvId}.", tv.Id);
+                process.Dispose();
                 return;
             }
 
@@ -215,7 +265,7 @@ public sealed class HlsProcessManager : BackgroundService
         {
             _logger.LogError(
                 ex,
-                "TV {TvId}: impossible de démarrer FFmpeg. Vérifie que FFmpeg est installé.",
+                "TV {TvId}: impossible de démarrer FFmpeg. Nouvelle tentative automatique.",
                 tv.Id);
         }
     }
@@ -225,6 +275,24 @@ public sealed class HlsProcessManager : BackgroundService
 
     private string GetHlsRoot() => Path.GetFullPath(
         Path.Combine(_environment.ContentRootPath, _cfg.HlsFolder));
+
+    private static string? SafeResolveMediaPath(string mediaRoot, string relativePath)
+    {
+        try
+        {
+            var normalized = (relativePath ?? "").Replace('/', Path.DirectorySeparatorChar);
+            var fullPath = Path.GetFullPath(Path.Combine(mediaRoot, normalized));
+            var rootWithSeparator = mediaRoot.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+            return fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase)
+                ? fullPath
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     private static int? SafeExitCode(Process process)
     {
@@ -263,7 +331,7 @@ public sealed class HlsProcessManager : BackgroundService
         {
         }
 
-        process.Dispose();
+        try { process.Dispose(); } catch { }
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
