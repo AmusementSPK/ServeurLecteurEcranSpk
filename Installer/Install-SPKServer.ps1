@@ -133,15 +133,8 @@ function Install-Dotnet {
     $installer = Join-Path $Downloads "dotnet-install.ps1"
     Download-File "https://dot.net/v1/dotnet-install.ps1" $installer
 
-    $p = Start-Process -FilePath "powershell.exe" -ArgumentList @(
-        "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-File", $installer,
-        "-Channel", "10.0",
-        "-Quality", "GA",
-        "-InstallDir", $DotnetDir,
-        "-NoPath"
-    ) -Wait -PassThru -WindowStyle Hidden
+    $dotnetInstallArgs = '-NoProfile -ExecutionPolicy Bypass -File "' + $installer + '" -Channel 10.0 -InstallDir "' + $DotnetDir + '" -NoPath'
+    $p = Start-Process -FilePath "powershell.exe" -ArgumentList $dotnetInstallArgs -Wait -PassThru -WindowStyle Hidden
 
     if ($p.ExitCode -ne 0 -or -not (Test-Path $DotnetExe)) {
         throw "L'installation locale de .NET 10 a échoué (code $($p.ExitCode))."
