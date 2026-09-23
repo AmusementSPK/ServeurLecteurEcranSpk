@@ -96,6 +96,10 @@
                   Source="$(FfmpegExe)"
                   Name="ffmpeg.exe"
                   KeyPath="yes" />
+              <File
+                  Id="FfmpegVersion"
+                  Source="$(FfmpegVersionFile)"
+                  Name="ffmpeg.version.txt" />
             </Component>
           </Directory>
 
