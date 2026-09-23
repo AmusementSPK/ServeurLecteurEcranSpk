@@ -13,7 +13,7 @@ public sealed class ServiceRecoveryMonitor : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Laisse le service et FFmpeg démarrer avant de surveiller le heartbeat.
+        // Allow the service and FFmpeg to start before monitoring the heartbeat.
         await Task.Delay(TimeSpan.FromSeconds(45), stoppingToken);
 
         var consecutiveFailures = 0;
@@ -28,17 +28,17 @@ public sealed class ServiceRecoveryMonitor : BackgroundService
             {
                 consecutiveFailures++;
                 _logger.LogError(
-                    "Heartbeat HLS absent ({Count}/4). Dernière maintenance: {LastMaintenance}.",
+                    "HLS heartbeat missing ({Count}/4). Last maintenance: {LastMaintenance}.",
                     consecutiveFailures,
                     _hls.LastMaintenanceUtc);
 
                 if (consecutiveFailures >= 4)
                 {
                     _logger.LogCritical(
-                        "Le superviseur HLS est bloqué. Arrêt volontaire du processus pour permettre au Service Control Manager de le redémarrer.");
+                        "The HLS supervisor is unresponsive. Terminating the process so Windows Service Control Manager can restart it.");
 
                     await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
-                    Environment.FailFast("SPK HLS supervisor heartbeat expired.");
+                    Environment.FailFast("Display server HLS supervisor heartbeat expired.");
                 }
             }
 

@@ -5,7 +5,7 @@ public sealed class HlsProcessManager : BackgroundService
 {
     private readonly ILogger<HlsProcessManager> _logger;
     private readonly StreamingOptions _cfg;
-    private readonly SpkPaths _paths;
+    private readonly DisplayServerPaths _paths;
     private readonly TvConfigStore _store;
     private readonly Dictionary<string, Process> _processes =
         new(StringComparer.OrdinalIgnoreCase);
@@ -15,7 +15,7 @@ public sealed class HlsProcessManager : BackgroundService
     public HlsProcessManager(
         ILogger<HlsProcessManager> logger,
         IOptions<StreamingOptions> options,
-        SpkPaths paths,
+        DisplayServerPaths paths,
         TvConfigStore store)
     {
         _logger = logger;
@@ -92,7 +92,7 @@ public sealed class HlsProcessManager : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("SPK HLS: démarrage du gestionnaire FFmpeg résilient.");
+        _logger.LogInformation("Display server HLS: starting resilient FFmpeg supervisor.");
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -104,7 +104,7 @@ public sealed class HlsProcessManager : BackgroundService
             catch (Exception ex)
             {
                 // Une erreur de surveillance HLS ne doit JAMAIS faire tomber le serveur web.
-                _logger.LogError(ex, "SPK HLS: erreur dans la boucle de surveillance. Nouvelle tentative dans 3 secondes.");
+                _logger.LogError(ex, "Display server HLS: supervisor loop error. Retrying in 3 seconds.");
             }
 
             try
@@ -136,7 +136,7 @@ public sealed class HlsProcessManager : BackgroundService
             catch (Exception ex)
             {
                 // Une TV problématique ne doit jamais empêcher les autres de continuer.
-                _logger.LogError(ex, "TV {TvId}: erreur de surveillance du flux.", tv.Id);
+                _logger.LogError(ex, "TV {TvId}: stream supervision error.", tv.Id);
             }
         }
     }
@@ -156,7 +156,7 @@ public sealed class HlsProcessManager : BackgroundService
             var input = SafeResolveMediaPath(mediaRoot, tv.FileName);
             if (input is null)
             {
-                _logger.LogError("Chemin invalide pour TV {TvId}.", tv.Id);
+                _logger.LogError("Invalid media path for TV {TvId}.", tv.Id);
                 return;
             }
 
@@ -236,7 +236,7 @@ public sealed class HlsProcessManager : BackgroundService
             process.Exited += (_, _) =>
             {
                 _logger.LogWarning(
-                    "FFmpeg TV {TvId} s'est arrêté (code {ExitCode}). Redémarrage automatique au prochain cycle.",
+                    "FFmpeg TV {TvId} exited (code {ExitCode}). Automatic restart on next cycle.",
                     tv.Id,
                     SafeExitCode(process));
             };
@@ -257,7 +257,7 @@ public sealed class HlsProcessManager : BackgroundService
             }
 
             _logger.LogInformation(
-                "TV {TvId}: flux HLS démarré -> /hls/tv{TvId}/index.m3u8",
+                "TV {TvId}: HLS stream started -> /hls/tv{TvId}/index.m3u8",
                 tv.Id,
                 tv.Id);
         }
@@ -265,7 +265,7 @@ public sealed class HlsProcessManager : BackgroundService
         {
             _logger.LogError(
                 ex,
-                "TV {TvId}: impossible de démarrer FFmpeg. Nouvelle tentative automatique.",
+                "TV {TvId}: unable to start FFmpeg. Automatic retry scheduled.",
                 tv.Id);
         }
     }

@@ -5,7 +5,7 @@ public sealed class TvConfigStore
 {
     private readonly object _gate = new();
     private readonly StreamingOptions _cfg;
-    private readonly SpkPaths _paths;
+    private readonly DisplayServerPaths _paths;
     private readonly ILogger<TvConfigStore> _logger;
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -17,7 +17,7 @@ public sealed class TvConfigStore
 
     public TvConfigStore(
         IOptions<StreamingOptions> options,
-        SpkPaths paths,
+        DisplayServerPaths paths,
         ILogger<TvConfigStore> logger)
     {
         _cfg = options.Value;
@@ -78,7 +78,7 @@ public sealed class TvConfigStore
         lock (_gate)
         {
             var tv = _tvs.FirstOrDefault(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
-                ?? throw new KeyNotFoundException("Télévision introuvable.");
+                ?? throw new KeyNotFoundException("Television not found.");
 
             tv.Name = NormalizeName(requestedName, $"TV {tv.Id}");
             SaveLocked();
@@ -91,11 +91,11 @@ public sealed class TvConfigStore
         lock (_gate)
         {
             var tv = _tvs.FirstOrDefault(x => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase))
-                ?? throw new KeyNotFoundException("Télévision introuvable.");
+                ?? throw new KeyNotFoundException("Television not found.");
 
             var normalizedPath = NormalizeMediaPath(relativeFileName);
             if (!IsValidMediaPath(normalizedPath))
-                throw new InvalidOperationException("Nom de fichier média invalide.");
+                throw new InvalidOperationException("Invalid media filename.");
 
             tv.FileName = normalizedPath;
             SaveLocked();
@@ -125,7 +125,7 @@ public sealed class TvConfigStore
                             .ToList();
 
                         _logger.LogInformation(
-                            "Configuration TV chargée depuis {Path}: {Count} TV.",
+                            "TV configuration loaded from {Path}: {Count} TV.",
                             _configPath,
                             _tvs.Count);
                         return;
@@ -133,7 +133,7 @@ public sealed class TvConfigStore
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Impossible de lire {Path}. Réinitialisation depuis appsettings.json.", _configPath);
+                    _logger.LogError(ex, "Unable to read {Path}. Resetting from appsettings.json.", _configPath);
                 }
             }
 

@@ -5,18 +5,15 @@ using System.ServiceProcess;
 using System.Text.Json;
 using System.Security.Principal;
 
-namespace SPK.Server.Manager;
+namespace DisplayServer.Manager;
 
 public sealed class MainForm : Form
 {
-    private const string ServiceName = "AmusementSPKDisplayServer";
-    private const string LocalHealthUrl = "http://127.0.0.1:8090/health";
-    private const string LocalWebUrl = "http://127.0.0.1:8090/";
-
-    private static readonly string DataRoot = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "Amusement SPK",
-        "Display Server");
+    private const string ServiceName = "LocalDisplayServer";
+    private static readonly int ServerPort = LoadServerPort();
+    private static readonly string LocalHealthUrl = $"http://127.0.0.1:{ServerPort}/health";
+    private static readonly string LocalWebUrl = $"http://127.0.0.1:{ServerPort}/";
+    private static readonly string DataRoot = LoadDataRoot();
 
     private readonly Label _serviceValue = new();
     private readonly Label _healthValue = new();
@@ -30,7 +27,7 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "SPK Server Manager";
+        Text = "Display Server Manager";
         Width = 820;
         Height = 570;
         MinimumSize = new Size(820, 570);
@@ -65,7 +62,7 @@ public sealed class MainForm : Form
 
         header.Controls.Add(new Label
         {
-            Text = "AMUSEMENT SPK",
+            Text = "LOCAL DISPLAY SERVER",
             ForeColor = Color.FromArgb(255, 112, 70),
             Font = new Font("Segoe UI", 10F, FontStyle.Bold),
             Location = new Point(28, 15),
@@ -74,7 +71,7 @@ public sealed class MainForm : Form
 
         header.Controls.Add(new Label
         {
-            Text = "SPK Server Manager",
+            Text = "Display Server Manager",
             ForeColor = Color.White,
             Font = new Font("Segoe UI", 21F, FontStyle.Bold),
             Location = new Point(26, 39),
@@ -83,42 +80,42 @@ public sealed class MainForm : Form
 
         var statusBox = new GroupBox
         {
-            Text = "État du serveur",
+            Text = "Server status",
             Location = new Point(28, 112),
             Size = new Size(746, 150)
         };
         Controls.Add(statusBox);
 
-        AddStatusRow(statusBox, "Service Windows", _serviceValue, 28);
-        AddStatusRow(statusBox, "Santé HLS", _healthValue, 63);
-        AddStatusRow(statusBox, "Adresse réseau", _ipValue, 98);
+        AddStatusRow(statusBox, "Windows service", _serviceValue, 28);
+        AddStatusRow(statusBox, "HLS health", _healthValue, 63);
+        AddStatusRow(statusBox, "Network address", _ipValue, 98);
 
         _detailValue.Location = new Point(30, 272);
         _detailValue.Size = new Size(740, 44);
         _detailValue.ForeColor = Color.DimGray;
         Controls.Add(_detailValue);
 
-        ConfigureActionButton(_startButton, "Démarrer", 28, 330, async () => await StartServiceAsync());
-        ConfigureActionButton(_stopButton, "Arrêter", 154, 330, async () => await StopServiceAsync());
-        ConfigureActionButton(_restartButton, "Redémarrer", 280, 330, async () => await RestartServiceAsync());
+        ConfigureActionButton(_startButton, "Start", 28, 330, async () => await StartServiceAsync());
+        ConfigureActionButton(_stopButton, "Stop", 154, 330, async () => await StopServiceAsync());
+        ConfigureActionButton(_restartButton, "Restart", 280, 330, async () => await RestartServiceAsync());
 
-        var refresh = NewButton("Actualiser", 406, 330, 118);
+        var refresh = NewButton("Refresh", 406, 330, 118);
         refresh.Click += async (_, _) => await RefreshStateAsync();
         Controls.Add(refresh);
 
-        var web = NewButton("Ouvrir panneau Web", 28, 390, 180);
+        var web = NewButton("Open web panel", 28, 390, 180);
         web.Click += (_, _) => OpenTarget(LocalWebUrl);
         Controls.Add(web);
 
-        var logs = NewButton("Ouvrir les logs", 220, 390, 160);
+        var logs = NewButton("Open logs", 220, 390, 160);
         logs.Click += (_, _) => OpenFolder(Path.Combine(DataRoot, "Logs"));
         Controls.Add(logs);
 
-        var data = NewButton("Ouvrir les données", 392, 390, 170);
+        var data = NewButton("Open data", 392, 390, 170);
         data.Click += (_, _) => OpenFolder(DataRoot);
         Controls.Add(data);
 
-        var import = NewButton("Importer ancienne installation", 28, 450, 250);
+        var import = NewButton("Import existing data", 28, 450, 250);
         import.BackColor = Color.FromArgb(255, 91, 46);
         import.ForeColor = Color.White;
         import.FlatStyle = FlatStyle.Flat;
@@ -128,7 +125,7 @@ public sealed class MainForm : Form
 
         Controls.Add(new Label
         {
-            Text = "L'import copie Data et Media d'une ancienne installation vers ProgramData puis redémarre le service.",
+            Text = "Imports Data and Media from another installation into ProgramData, then restarts the service.",
             Location = new Point(300, 452),
             Size = new Size(465, 50),
             ForeColor = Color.DimGray
@@ -147,7 +144,7 @@ public sealed class MainForm : Form
 
         value.Location = new Point(215, y);
         value.Size = new Size(500, 28);
-        value.Text = "Vérification...";
+        value.Text = "Checking...";
         parent.Controls.Add(value);
     }
 
@@ -180,7 +177,7 @@ public sealed class MainForm : Form
             {
                 MessageBox.Show(
                     ex.Message,
-                    "SPK Server Manager",
+                    "Display Server Manager",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
             }
@@ -196,7 +193,7 @@ public sealed class MainForm : Form
     private async Task RefreshStateAsync()
     {
         var status = GetServiceStatus();
-        _serviceValue.Text = status?.ToString() ?? "Non installé";
+        _serviceValue.Text = status?.ToString() ?? "Not installed";
         _serviceValue.ForeColor = status == ServiceControllerStatus.Running
             ? Color.DarkGreen
             : Color.DarkRed;
@@ -213,8 +210,8 @@ public sealed class MainForm : Form
 
             var root = document.RootElement;
             var health = root.TryGetProperty("status", out var statusProperty)
-                ? statusProperty.GetString() ?? "Inconnu"
-                : "Inconnu";
+                ? statusProperty.GetString() ?? "Unknown"
+                : "Unknown";
 
             var healthy = response.IsSuccessStatusCode &&
                           root.TryGetProperty("hlsSupervisorHealthy", out var hlsProperty) &&
@@ -225,16 +222,16 @@ public sealed class MainForm : Form
         }
         catch
         {
-            _healthValue.Text = "Injoignable";
+            _healthValue.Text = "Unreachable";
             _healthValue.ForeColor = Color.DarkRed;
         }
 
         var addresses = GetLanAddresses();
         _ipValue.Text = addresses.Count == 0
-            ? "Aucune IPv4 détectée"
+            ? "No IPv4 address detected"
             : string.Join("   ", addresses.Select(ip => $"http://{ip}:8090/"));
 
-        _detailValue.Text = $"Données : {DataRoot}";
+        _detailValue.Text = $"Data: {DataRoot}";
     }
 
     private static ServiceControllerStatus? GetServiceStatus()
@@ -292,7 +289,7 @@ public sealed class MainForm : Form
 
         using var picker = new FolderBrowserDialog
         {
-            Description = "Choisis le dossier racine de l'ancienne installation ServeurLecteurEcranSpk.",
+            Description = "Choose the root folder of an existing display-server installation.",
             ShowNewFolderButton = false
         };
 
@@ -306,8 +303,8 @@ public sealed class MainForm : Form
         if (!Directory.Exists(sourceData) && !Directory.Exists(sourceMedia))
         {
             MessageBox.Show(
-                "Ce dossier ne contient ni Data ni Media. Choisis la racine de l'ancienne installation.",
-                "Import SPK",
+                "This folder contains neither Data nor Media. Choose the installation root.",
+                "Import data",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
             return;
@@ -316,7 +313,7 @@ public sealed class MainForm : Form
         var confirmation = MessageBox.Show(
             "Le service sera arrêté, puis Data et Media seront copiés vers la nouvelle installation. " +
             "Les fichiers portant le même nom seront remplacés. Continuer ?",
-            "Importer l'ancienne installation",
+            "Import existing data",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Question);
 
@@ -338,8 +335,8 @@ public sealed class MainForm : Form
             await StartServiceAsync();
 
             MessageBox.Show(
-                "Import terminé. Le service SPK a été redémarré.",
-                "Import SPK",
+                "Import completed. The display service was restarted.",
+                "Import data",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
         }
@@ -348,8 +345,8 @@ public sealed class MainForm : Form
             try { await StartServiceAsync(); } catch { }
 
             MessageBox.Show(
-                "L'import a échoué : " + ex.Message,
-                "Import SPK",
+                "Import failed: " + ex.Message,
+                "Import data",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         }
@@ -419,8 +416,8 @@ public sealed class MainForm : Form
         catch (Exception ex)
         {
             MessageBox.Show(
-                "Impossible d'obtenir les droits administrateur : " + ex.Message,
-                "SPK Server Manager",
+                "Unable to obtain administrator rights: " + ex.Message,
+                "Display Server Manager",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         }
@@ -433,6 +430,82 @@ public sealed class MainForm : Form
         using var identity = WindowsIdentity.GetCurrent();
         var principal = new WindowsPrincipal(identity);
         return principal.IsInRole(WindowsBuiltInRole.Administrator);
+    }
+
+
+    private static string InstallRoot
+    {
+        get
+        {
+            var managerRoot = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return Directory.GetParent(managerRoot)?.FullName ?? AppContext.BaseDirectory;
+        }
+    }
+
+    private static int LoadServerPort()
+    {
+        try
+        {
+            var configPath = Path.Combine(InstallRoot, "appsettings.json");
+            if (!File.Exists(configPath))
+                return 8090;
+
+            using var document = JsonDocument.Parse(File.ReadAllText(configPath));
+            if (!document.RootElement.TryGetProperty("Server", out var server) ||
+                !server.TryGetProperty("Urls", out var urlsProperty))
+                return 8090;
+
+            var urls = urlsProperty.GetString();
+            if (string.IsNullOrWhiteSpace(urls))
+                return 8090;
+
+            foreach (var candidate in urls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var normalized = candidate
+                    .Replace("0.0.0.0", "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                    .Replace("*", "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                    .Replace("+", "127.0.0.1", StringComparison.OrdinalIgnoreCase);
+
+                if (Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
+                    return uri.Port;
+            }
+        }
+        catch
+        {
+        }
+
+        return 8090;
+    }
+
+    private static string LoadDataRoot()
+    {
+        try
+        {
+            var configPath = Path.Combine(InstallRoot, "appsettings.json");
+            if (File.Exists(configPath))
+            {
+                using var document = JsonDocument.Parse(File.ReadAllText(configPath));
+                if (document.RootElement.TryGetProperty("DisplayServer", out var section) &&
+                    section.TryGetProperty("DataRoot", out var valueProperty))
+                {
+                    var value = valueProperty.GetString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        var expanded = Environment.ExpandEnvironmentVariables(value);
+                        return Path.IsPathRooted(expanded)
+                            ? Path.GetFullPath(expanded)
+                            : Path.GetFullPath(Path.Combine(InstallRoot, expanded));
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "Local Display Server");
     }
 
     private static void OpenTarget(string target)

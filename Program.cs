@@ -6,14 +6,21 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.WebHost.UseUrls("http://0.0.0.0:8090");
+var serverUrls = builder.Configuration["Server:Urls"]
+    ?? Environment.GetEnvironmentVariable("DISPLAY_SERVER_URLS")
+    ?? "http://0.0.0.0:8090";
+var displayName = builder.Configuration["Branding:Name"] ?? "Local Display Server";
+var tagline = builder.Configuration["Branding:Tagline"] ?? "Self-hosted media signage";
+var serviceDisplayName = builder.Configuration["Branding:ServiceDisplayName"] ?? "Local Display Server";
+
+builder.WebHost.UseUrls(serverUrls);
 
 builder.Services.Configure<StreamingOptions>(
     builder.Configuration.GetSection("Streaming"));
 
 builder.Services.AddWindowsService(options =>
 {
-    options.ServiceName = "Amusement SPK Display Server";
+    options.ServiceName = serviceDisplayName;
 });
 
 builder.Services.Configure<HostOptions>(options =>
@@ -34,8 +41,8 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = maxUploadBytes;
 });
 
-builder.Services.AddSingleton<SpkPaths>();
-builder.Services.AddSingleton<ILoggerProvider, SpkFileLoggerProvider>();
+builder.Services.AddSingleton<DisplayServerPaths>();
+builder.Services.AddSingleton<ILoggerProvider, DailyFileLoggerProvider>();
 builder.Services.AddSingleton<TvConfigStore>();
 builder.Services.AddSingleton<HlsProcessManager>();
 builder.Services.AddSingleton<VideoNormalizer>();
@@ -44,7 +51,7 @@ builder.Services.AddHostedService<ServiceRecoveryMonitor>();
 
 var app = builder.Build();
 
-var paths = app.Services.GetRequiredService<SpkPaths>();
+var paths = app.Services.GetRequiredService<DisplayServerPaths>();
 var hlsRoot = paths.HlsRoot;
 var mediaRoot = paths.MediaRoot;
 
@@ -58,7 +65,7 @@ string ResolveMediaPath(string relativePath)
     var rootWithSeparator = mediaRoot.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
     if (!fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase))
-        throw new InvalidOperationException("Chemin média invalide.");
+        throw new InvalidOperationException("Invalid media path.");
 
     return fullPath;
 }
@@ -93,7 +100,7 @@ string MakeSafeBaseName(string originalFileName)
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-// Flux HLS utilisés par les Roku / VIDAA. La convention d'URL reste inchangée.
+// HLS streams consumed by browsers, Roku, VIDAA and other compatible clients.
 var hlsContentTypes = new FileExtensionContentTypeProvider();
 hlsContentTypes.Mappings[".m3u8"] = "application/vnd.apple.mpegurl";
 hlsContentTypes.Mappings[".ts"] = "video/mp2t";
@@ -130,10 +137,13 @@ app.MapGet("/health", (HlsProcessManager manager) =>
         : Results.Json(payload, statusCode: StatusCodes.Status503ServiceUnavailable);
 });
 
-app.MapGet("/api/system", (SpkPaths systemPaths) => Results.Ok(new
+app.MapGet("/api/system", (DisplayServerPaths systemPaths) => Results.Ok(new
 {
-    service = "Amusement SPK Display Server",
+    name = displayName,
+    tagline,
+    service = serviceDisplayName,
     version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown",
+    urls = serverUrls,
     dataRoot = systemPaths.DataRoot,
     mediaRoot = systemPaths.MediaRoot,
     logsRoot = systemPaths.LogsRoot,
@@ -156,7 +166,7 @@ app.MapGet("/tv/{tvId}", (string tvId, TvConfigStore store) =>
     });
 });
 
-app.MapGet("/api/roku/tvs", (TvConfigStore store) =>
+object ClientTelevisionList(TvConfigStore store)
 {
     var televisions = store.GetAll().Select(tv => new
     {
@@ -165,8 +175,13 @@ app.MapGet("/api/roku/tvs", (TvConfigStore store) =>
         streamUrl = $"/hls/tv{tv.Id}/index.m3u8"
     });
 
-    return Results.Ok(new { televisions });
-});
+    return new { televisions };
+}
+
+app.MapGet("/api/clients/tvs", (TvConfigStore store) => Results.Ok(ClientTelevisionList(store)));
+
+// Compatibility endpoint for simple Roku clients.
+app.MapGet("/api/roku/tvs", (TvConfigStore store) => Results.Ok(ClientTelevisionList(store)));
 
 app.MapGet("/api/tvs", (TvConfigStore store, HlsProcessManager manager) =>
 {
@@ -223,7 +238,7 @@ app.MapPut("/api/tvs/{tvId}/name", (string tvId, RenameTvRequest request, TvConf
     }
     catch (KeyNotFoundException)
     {
-        return Results.NotFound(new { error = "Télévision introuvable." });
+        return Results.NotFound(new { error = "Television not found." });
     }
 });
 
@@ -236,16 +251,16 @@ app.MapPost("/api/tvs/{tvId}/video", async (
 {
     var tv = store.Get(tvId);
     if (tv is null)
-        return Results.NotFound(new { error = "Télévision introuvable." });
+        return Results.NotFound(new { error = "Television not found." });
 
     if (!request.HasFormContentType)
-        return Results.BadRequest(new { error = "Le fichier média est manquant." });
+        return Results.BadRequest(new { error = "Media file is missing." });
 
     var form = await request.ReadFormAsync(request.HttpContext.RequestAborted);
     var file = form.Files.GetFile("video") ?? form.Files.FirstOrDefault();
 
     if (file is null || file.Length == 0)
-        return Results.BadRequest(new { error = "Le fichier média est vide." });
+        return Results.BadRequest(new { error = "Media file is empty." });
 
     var originalFileName = file.FileName
         .Replace('\\', '/')
@@ -275,7 +290,7 @@ app.MapPost("/api/tvs/{tvId}/video", async (
     {
         return Results.BadRequest(new
         {
-            error = "Format non supporté. Envoie une vidéo ou une image standard (JPG, PNG, WEBP, GIF, TIFF, AVIF, HEIC, etc.)."
+            error = "Unsupported format. Upload a standard video or image (JPG, PNG, WEBP, GIF, TIFF, AVIF, HEIC, etc.)."
         });
     }
 
@@ -350,7 +365,7 @@ app.MapPost("/api/tvs/{tvId}/video", async (
             manager.Restart(tv.Id);
 
         return Results.Problem(
-            title: "Envoi annulé.",
+            title: "Upload cancelled.",
             statusCode: StatusCodes.Status499ClientClosedRequest);
     }
     catch (Exception ex)
@@ -359,7 +374,7 @@ app.MapPost("/api/tvs/{tvId}/video", async (
             manager.Restart(tv.Id);
 
         return Results.Problem(
-            title: "Impossible de préparer le média.",
+            title: "Unable to prepare media.",
             detail: ex.Message,
             statusCode: StatusCodes.Status500InternalServerError);
     }
@@ -381,13 +396,14 @@ app.MapPost("/api/tvs/{tvId}/video", async (
     }
 });
 
-var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("SPK.Server");
+var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("DisplayServer.Server");
 app.Lifetime.ApplicationStarted.Register(() =>
 {
     startupLogger.LogInformation(
-        "Serveur SPK démarré. Données={DataRoot}; FFmpeg={FfmpegPath}; URL=http://0.0.0.0:8090",
+        "Display server started. DataRoot={DataRoot}; FFmpeg={FfmpegPath}; URLs={Urls}",
         paths.DataRoot,
-        paths.FfmpegPath);
+        paths.FfmpegPath,
+        serverUrls);
 });
 
 app.Run();

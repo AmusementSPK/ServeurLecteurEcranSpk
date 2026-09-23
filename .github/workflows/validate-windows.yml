@@ -1,0 +1,30 @@
+name: Validate Windows Builds
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Program.cs'
+      - 'DisplayServer.Server.csproj'
+      - 'Services/**'
+      - 'Logging/**'
+      - 'Models/**'
+      - 'StreamingOptions.cs'
+      - 'Manager/**'
+      - '.github/workflows/validate-windows.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish server
+        run: dotnet publish DisplayServer.Server.csproj -c Release -r win-x64 --self-contained true -o artifacts/server
+      - name: Publish manager
+        run: dotnet publish Manager/DisplayServer.Manager.csproj -c Release -r win-x64 --self-contained true -o artifacts/manager

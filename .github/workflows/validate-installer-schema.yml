@@ -1,11 +1,11 @@
-name: Validate WiX Schema
+name: Validate Installer Schema
 
 on:
   push:
     branches: [ main ]
     paths:
       - 'Installer/Windows/**'
-      - '.github/workflows/validate-wix-schema.yml'
+      - '.github/workflows/validate-installer-schema.yml'
 
 permissions:
   contents: read
@@ -15,25 +15,21 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-
       - name: Create dummy packaging inputs
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force artifacts/server, artifacts/manager, artifacts/ffmpeg | Out-Null
-          Set-Content artifacts/server/SPK.Server.exe 'dummy'
+          Set-Content artifacts/server/DisplayServer.Server.exe 'dummy'
           Set-Content artifacts/server/appsettings.json '{}'
           New-Item -ItemType Directory -Force artifacts/server/wwwroot | Out-Null
           Set-Content artifacts/server/wwwroot/index.html '<html></html>'
-          Set-Content artifacts/manager/SPK.Server.Manager.exe 'dummy'
+          Set-Content artifacts/manager/DisplayServer.Manager.exe 'dummy'
           Set-Content artifacts/manager/runtime.dll 'dummy'
           Set-Content artifacts/ffmpeg/ffmpeg.exe 'dummy'
           Set-Content artifacts/ffmpeg/ffmpeg.version.txt 'dummy'
-
       - name: Compile WiX MSI
         shell: pwsh
         run: |
@@ -41,8 +37,7 @@ jobs:
           $manager = Join-Path $env:GITHUB_WORKSPACE 'artifacts\manager'
           $ffmpeg = Join-Path $env:GITHUB_WORKSPACE 'artifacts\ffmpeg\ffmpeg.exe'
           $ffmpegVersion = Join-Path $env:GITHUB_WORKSPACE 'artifacts\ffmpeg\ffmpeg.version.txt'
-
-          dotnet build Installer/Windows/SPK.DisplayServer.Setup.wixproj `
+          dotnet build Installer/Windows/DisplayServer.Setup.wixproj `
             -c Release `
             -p:ServerPublishDir="$server" `
             -p:ManagerPublishDir="$manager" `

@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Hosting.WindowsServices;
 using Microsoft.Extensions.Options;
 
-public sealed class SpkPaths
+public sealed class DisplayServerPaths
 {
     public string ProgramRoot { get; }
     public string DataRoot { get; }
@@ -11,7 +11,7 @@ public sealed class SpkPaths
     public string LogsRoot { get; }
     public string FfmpegPath { get; }
 
-    public SpkPaths(
+    public DisplayServerPaths(
         IHostEnvironment environment,
         IOptions<StreamingOptions> options,
         IConfiguration configuration)
@@ -19,24 +19,24 @@ public sealed class SpkPaths
         ProgramRoot = Path.GetFullPath(AppContext.BaseDirectory);
 
         var configuredRoot =
-            configuration["Spk:DataRoot"] ??
-            Environment.GetEnvironmentVariable("SPK_DATA_ROOT");
+            configuration["DisplayServer:DataRoot"] ??
+            Environment.GetEnvironmentVariable("DISPLAY_SERVER_DATA_ROOT");
 
         if (!string.IsNullOrWhiteSpace(configuredRoot))
         {
-            DataRoot = Path.GetFullPath(
-                Environment.ExpandEnvironmentVariables(configuredRoot));
+            var expanded = Environment.ExpandEnvironmentVariables(configuredRoot);
+            DataRoot = Path.IsPathRooted(expanded)
+                ? Path.GetFullPath(expanded)
+                : Path.GetFullPath(Path.Combine(ProgramRoot, expanded));
         }
         else if (OperatingSystem.IsWindows() && WindowsServiceHelpers.IsWindowsService())
         {
             DataRoot = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                "Amusement SPK",
-                "Display Server");
+                "Local Display Server");
         }
         else
         {
-            // Mode développement / lancement manuel depuis le repo.
             DataRoot = environment.ContentRootPath;
         }
 
@@ -58,10 +58,8 @@ public sealed class SpkPaths
     private string ResolveDataFolder(string? configured, string fallback)
     {
         var value = string.IsNullOrWhiteSpace(configured) ? fallback : configured.Trim();
-
         if (Path.IsPathRooted(value))
             return Path.GetFullPath(value);
-
         return Path.GetFullPath(Path.Combine(DataRoot, value));
     }
 

@@ -1,4 +1,4 @@
-namespace SPK.Server.Manager;
+namespace DisplayServer.Manager;
 
 internal static class Program
 {

@@ -1,11 +1,11 @@
 using System.Diagnostics;
 public sealed class VideoNormalizer
 {
-    private readonly SpkPaths _paths;
+    private readonly DisplayServerPaths _paths;
     private readonly ILogger<VideoNormalizer> _logger;
 
     public VideoNormalizer(
-        SpkPaths paths,
+        DisplayServerPaths paths,
         ILogger<VideoNormalizer> logger)
     {
         _paths = paths;
@@ -49,13 +49,13 @@ public sealed class VideoNormalizer
         psi.ArgumentList.Add("-vf");
         if (isStillImage)
         {
-            // Toujours la première image seulement, même si le fichier est un GIF/WebP animé.
-            // Elle est ensuite clonée pendant exactement 10 secondes.
+            // Always use the first frame, even for animated GIF/WebP files.
+            // The frame is cloned for exactly 10 seconds.
             psi.ArgumentList.Add("select='eq(n,0)',scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,tpad=stop_mode=clone:stop_duration=10,fps=30");
         }
         else
         {
-            // Vidéos : 1080p max et 30 fps constant pour un HLS stable sur Roku / VIDAA.
+            // Videos: max 1080p at a constant 30 fps for stable HLS playback.
             psi.ArgumentList.Add("scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=30");
         }
 
@@ -104,13 +104,13 @@ public sealed class VideoNormalizer
 
         _logger.LogInformation(
             isStillImage
-                ? "Conversion image fixe 10 s: {Input} -> {Output}"
-                : "Normalisation vidéo: {Input} -> {Output}",
+                ? "Still-image conversion (10 s): {Input} -> {Output}"
+                : "Video normalization: {Input} -> {Output}",
             Path.GetFileName(inputPath),
             Path.GetFileName(outputPath));
 
         if (!process.Start())
-            throw new InvalidOperationException("FFmpeg n'a pas pu démarrer.");
+            throw new InvalidOperationException("FFmpeg could not start.");
 
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
@@ -125,12 +125,12 @@ public sealed class VideoNormalizer
                 File.Delete(outputPath);
 
             var detail = string.IsNullOrWhiteSpace(stderr)
-                ? $"FFmpeg a terminé avec le code {process.ExitCode}."
+                ? $"FFmpeg exited with code {process.ExitCode}."
                 : stderr.Trim();
 
-            throw new InvalidOperationException($"Conversion média impossible: {detail}");
+            throw new InvalidOperationException($"Media conversion failed: {detail}");
         }
 
-        _logger.LogInformation("Conversion média terminée.");
+        _logger.LogInformation("Media conversion completed.");
     }
 }

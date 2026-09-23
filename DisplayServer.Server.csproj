@@ -1,28 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
-
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <OutputType>Exe</OutputType>
-    <AssemblyName>SPK.Server</AssemblyName>
-    <RootNamespace>SPK.Server</RootNamespace>
+    <AssemblyName>DisplayServer.Server</AssemblyName>
+    <RootNamespace>DisplayServer.Server</RootNamespace>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PlatformTarget>x64</PlatformTarget>
     <SelfContained>true</SelfContained>
-<PublishReadyToRun>true</PublishReadyToRun>
-<Version>1.0.0</Version>
-    <Company>Amusement SPK</Company>
-    <Product>SPK Display Server</Product>
-    <Description>Serveur d'affichage Roku et VIDAA d'Amusement SPK</Description>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <Version>1.0.0</Version>
+    <Company>Local Display Server Project</Company>
+    <Product>Local Display Server</Product>
+    <Description>Self-hosted HLS media signage server for Windows</Description>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
   </ItemGroup>
-
   <ItemGroup>
     <Compile Remove="Manager\**\*.cs" />
   </ItemGroup>
-
 </Project>

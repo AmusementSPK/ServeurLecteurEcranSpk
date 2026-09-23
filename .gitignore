@@ -1,10 +1,13 @@
 bin/
 obj/
+artifacts/
+.vs/
 Hls/*
 !Hls/.gitkeep
-Data/tvs.json
-Data/*.tmp
+Data/*
+!Data/.gitkeep
 Media/*
 !Media/.gitkeep
 Logs/
-.spk-tools/
+*.user
+*.suo

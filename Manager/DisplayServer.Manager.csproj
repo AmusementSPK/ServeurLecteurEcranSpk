@@ -1,26 +1,23 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>SPK.Server.Manager</AssemblyName>
-    <RootNamespace>SPK.Server.Manager</RootNamespace>
+    <AssemblyName>DisplayServer.Manager</AssemblyName>
+    <RootNamespace>DisplayServer.Manager</RootNamespace>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PlatformTarget>x64</PlatformTarget>
     <SelfContained>true</SelfContained>
-<PublishReadyToRun>true</PublishReadyToRun>
-<ApplicationManifest>app.manifest</ApplicationManifest>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <Version>1.0.0</Version>
-    <Company>Amusement SPK</Company>
-    <Product>SPK Server Manager</Product>
-    <Description>Gestionnaire du serveur d'affichage Amusement SPK</Description>
+    <Company>Local Display Server Project</Company>
+    <Product>Display Server Manager</Product>
+    <Description>Windows manager for Local Display Server</Description>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.12" />
   </ItemGroup>
-
 </Project>

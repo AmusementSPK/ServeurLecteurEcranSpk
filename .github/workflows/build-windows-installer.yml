@@ -1,5 +1,4 @@
-name: Build SPK MSI
-# production unsigned MSI build
+name: Build Windows Installer
 
 on:
   workflow_dispatch:
@@ -7,7 +6,7 @@ on:
     branches: [ main ]
     paths:
       - 'Program.cs'
-      - 'SPK.Streaming.csproj'
+      - 'DisplayServer.Server.csproj'
       - 'appsettings.json'
       - 'Services/**'
       - 'Logging/**'
@@ -16,7 +15,7 @@ on:
       - 'wwwroot/**'
       - 'Manager/**'
       - 'Installer/Windows/**'
-      - '.github/workflows/build-spk-msi.yml'
+      - '.github/workflows/build-windows-installer.yml'
 
 permissions:
   contents: read
@@ -24,7 +23,6 @@ permissions:
 jobs:
   build-msi:
     runs-on: windows-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,19 +32,19 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Publish SPK Server
+      - name: Publish server
         shell: pwsh
         run: |
-          dotnet publish SPK.Streaming.csproj `
+          dotnet publish DisplayServer.Server.csproj `
             -c Release `
             -r win-x64 `
             --self-contained true `
             -o "$env:GITHUB_WORKSPACE\artifacts\server"
 
-      - name: Publish SPK Server Manager
+      - name: Publish manager
         shell: pwsh
         run: |
-          dotnet publish Manager/SPK.Server.Manager.csproj `
+          dotnet publish Manager/DisplayServer.Manager.csproj `
             -c Release `
             -r win-x64 `
             --self-contained true `
@@ -57,48 +55,27 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
-
           $downloadDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts\ffmpeg-download'
           $outputDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts\ffmpeg'
           New-Item -ItemType Directory -Force -Path $downloadDir, $outputDir | Out-Null
-
           $zip = Join-Path $downloadDir 'ffmpeg-release-essentials.zip'
           $sha = Join-Path $downloadDir 'ffmpeg-release-essentials.zip.sha256'
           $ver = Join-Path $outputDir 'ffmpeg.version.txt'
-
           Invoke-WebRequest -UseBasicParsing 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip' -OutFile $zip
           Invoke-WebRequest -UseBasicParsing 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip.sha256' -OutFile $sha
           Invoke-WebRequest -UseBasicParsing 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip.ver' -OutFile $ver
-
           $match = [regex]::Match((Get-Content -Raw $sha), '(?i)\b[a-f0-9]{64}\b')
-          if (-not $match.Success) {
-            throw 'Impossible de lire le SHA-256 officiel de FFmpeg.'
-          }
-
+          if (-not $match.Success) { throw 'Unable to read the official FFmpeg SHA-256.' }
           $expected = $match.Value.ToUpperInvariant()
           $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToUpperInvariant()
-          if ($expected -ne $actual) {
-            throw "SHA-256 FFmpeg invalide. Attendu=$expected Reçu=$actual"
-          }
-
+          if ($expected -ne $actual) { throw "FFmpeg SHA-256 mismatch." }
           $extract = Join-Path $downloadDir 'extract'
           Expand-Archive -Path $zip -DestinationPath $extract -Force
-
           $ffmpeg = Get-ChildItem $extract -Recurse -Filter 'ffmpeg.exe' -File | Select-Object -First 1
-          if ($null -eq $ffmpeg) {
-            throw 'ffmpeg.exe introuvable dans l archive.'
-          }
-
+          if ($null -eq $ffmpeg) { throw 'ffmpeg.exe not found in archive.' }
           Copy-Item $ffmpeg.FullName (Join-Path $outputDir 'ffmpeg.exe') -Force
-
           $encoders = & (Join-Path $outputDir 'ffmpeg.exe') -hide_banner -encoders 2>&1
-          if ($LASTEXITCODE -ne 0) {
-            throw 'FFmpeg ne démarre pas correctement.'
-          }
-
-          if (-not ($encoders | Select-String -SimpleMatch 'libx264')) {
-            throw 'La copie de FFmpeg téléchargée ne contient pas libx264.'
-          }
+          if ($LASTEXITCODE -ne 0 -or -not ($encoders | Select-String -SimpleMatch 'libx264')) { throw 'Downloaded FFmpeg build does not provide libx264.' }
 
       - name: Build MSI
         shell: pwsh
@@ -107,8 +84,7 @@ jobs:
           $manager = Join-Path $env:GITHUB_WORKSPACE 'artifacts\manager'
           $ffmpeg = Join-Path $env:GITHUB_WORKSPACE 'artifacts\ffmpeg\ffmpeg.exe'
           $ffmpegVersion = Join-Path $env:GITHUB_WORKSPACE 'artifacts\ffmpeg\ffmpeg.version.txt'
-
-          dotnet build Installer/Windows/SPK.DisplayServer.Setup.wixproj `
+          dotnet build Installer/Windows/DisplayServer.Setup.wixproj `
             -c Release `
             -p:ServerPublishDir="$server" `
             -p:ManagerPublishDir="$manager" `
@@ -120,91 +96,50 @@ jobs:
         shell: pwsh
         run: |
           $msi = Get-ChildItem Installer/Windows/bin -Recurse -Filter '*.msi' | Select-Object -First 1
-          if ($null -eq $msi) {
-            throw 'Le MSI n a pas été généré.'
-          }
-
+          if ($null -eq $msi) { throw 'MSI was not generated.' }
           $out = Join-Path $env:GITHUB_WORKSPACE 'artifacts\msi'
           New-Item -ItemType Directory -Force -Path $out | Out-Null
-          Copy-Item $msi.FullName (Join-Path $out 'SPK-Display-Server-Setup.msi') -Force
-
-          $hash = (Get-FileHash (Join-Path $out 'SPK-Display-Server-Setup.msi') -Algorithm SHA256).Hash
-          "SHA256  SPK-Display-Server-Setup.msi  $hash" |
-            Set-Content (Join-Path $out 'SPK-Display-Server-Setup.sha256.txt')
-
+          $target = Join-Path $out 'Local-Display-Server-Setup.msi'
+          Copy-Item $msi.FullName $target -Force
+          $hash = (Get-FileHash $target -Algorithm SHA256).Hash
+          "SHA256  Local-Display-Server-Setup.msi  $hash" | Set-Content (Join-Path $out 'Local-Display-Server-Setup.sha256.txt')
           Copy-Item (Join-Path $env:GITHUB_WORKSPACE 'artifacts\ffmpeg\ffmpeg.version.txt') $out -Force
 
       - name: Install and smoke-test MSI
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $msi = Join-Path $env:GITHUB_WORKSPACE 'artifacts\msi\SPK-Display-Server-Setup.msi'
-          $installLog = Join-Path $env:GITHUB_WORKSPACE 'artifacts\msi\msi-install.log'
-          $uninstallLog = Join-Path $env:GITHUB_WORKSPACE 'artifacts\msi\msi-uninstall.log'
-
-          $installArgs = @('/i', $msi, '/qn', '/norestart', '/l*v', $installLog)
-          $install = Start-Process msiexec.exe -ArgumentList $installArgs -Wait -PassThru
-          if ($install.ExitCode -ne 0) {
-            throw "Installation MSI échouée. Code=$($install.ExitCode). Voir $installLog"
-          }
-
-          $service = Get-Service -Name 'AmusementSPKDisplayServer' -ErrorAction Stop
+          $msi = Join-Path $env:GITHUB_WORKSPACE 'artifacts\msi\Local-Display-Server-Setup.msi'
+          $install = Start-Process msiexec.exe -ArgumentList @('/i', $msi, '/qn', '/norestart') -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "MSI install failed. Code=$($install.ExitCode)" }
+          $service = Get-Service -Name 'LocalDisplayServer' -ErrorAction Stop
           $service.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Running, (New-TimeSpan -Seconds 60))
-
-          $programRoot = Join-Path $env:ProgramFiles 'Amusement SPK\Display Server'
-          $managerExe = Join-Path $programRoot 'Manager\SPK.Server.Manager.exe'
+          $programRoot = Join-Path $env:ProgramFiles 'Local Display Server'
+          $managerExe = Join-Path $programRoot 'Manager\DisplayServer.Manager.exe'
           $ffmpegExe = Join-Path $programRoot 'Tools\ffmpeg.exe'
-
-          if (-not (Test-Path $managerExe)) {
-            throw "SPK Server Manager introuvable après installation: $managerExe"
-          }
-          if (-not (Test-Path $ffmpegExe)) {
-            throw "FFmpeg introuvable après installation: $ffmpegExe"
-          }
-
+          if (-not (Test-Path $managerExe)) { throw 'Manager executable missing after install.' }
+          if (-not (Test-Path $ffmpegExe)) { throw 'FFmpeg executable missing after install.' }
           $healthy = $false
           for ($i = 0; $i -lt 30; $i++) {
             Start-Sleep -Seconds 2
             try {
               $health = Invoke-RestMethod -UseBasicParsing 'http://127.0.0.1:8090/health' -TimeoutSec 5
-              if ($health.status -eq 'OK' -and $health.hlsSupervisorHealthy -eq $true) {
-                $healthy = $true
-                break
-              }
-            }
-            catch {
-            }
+              if ($health.status -eq 'OK' -and $health.hlsSupervisorHealthy -eq $true) { $healthy = $true; break }
+            } catch {}
           }
-
-          if (-not $healthy) {
-            throw 'Le service est installé mais /health n est pas devenu sain.'
-          }
-
+          if (-not $healthy) { throw 'Installed service did not become healthy.' }
           $system = Invoke-RestMethod -UseBasicParsing 'http://127.0.0.1:8090/api/system' -TimeoutSec 5
-          if ($system.dataRoot -notlike '*Amusement SPK*Display Server*') {
-            throw "DataRoot inattendu: $($system.dataRoot)"
-          }
-          if ($system.ffmpeg -ne $ffmpegExe) {
-            throw "Chemin FFmpeg inattendu. API=$($system.ffmpeg) Attendu=$ffmpegExe"
-          }
-
-          $uninstallArgs = @('/x', $msi, '/qn', '/norestart', '/l*v', $uninstallLog)
-          $uninstall = Start-Process msiexec.exe -ArgumentList $uninstallArgs -Wait -PassThru
-          if ($uninstall.ExitCode -ne 0) {
-            throw "Désinstallation MSI échouée. Code=$($uninstall.ExitCode). Voir $uninstallLog"
-          }
-
+          if ($system.dataRoot -notlike '*Local Display Server*') { throw "Unexpected DataRoot: $($system.dataRoot)" }
+          if ($system.ffmpeg -ne $ffmpegExe) { throw "Unexpected FFmpeg path: $($system.ffmpeg)" }
+          $uninstall = Start-Process msiexec.exe -ArgumentList @('/x', $msi, '/qn', '/norestart') -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "MSI uninstall failed. Code=$($uninstall.ExitCode)" }
           Start-Sleep -Seconds 2
-          if (Get-Service -Name 'AmusementSPKDisplayServer' -ErrorAction SilentlyContinue) {
-            throw 'Le service SPK existe encore après désinstallation.'
-          }
+          if (Get-Service -Name 'LocalDisplayServer' -ErrorAction SilentlyContinue) { throw 'Service still exists after uninstall.' }
 
-          Write-Host 'MSI installé, service sain, dépendances validées et désinstallation validée.'
-
-      - name: Upload MSI artifact
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SPK-Display-Server-Setup
+          name: Local-Display-Server-Setup
           path: artifacts/msi/*
           if-no-files-found: error
           retention-days: 30

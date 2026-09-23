@@ -2,145 +2,87 @@
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
      xmlns:firewall="http://wixtoolset.org/schemas/v4/wxs/firewall">
-
-  <Package
-      Name="SPK Display Server"
-      Manufacturer="Amusement SPK"
+  <Package Name="Local Display Server"
+      Manufacturer="Local Display Server Project"
       Version="$(ProductVersion)"
-      Language="1036"
+      Language="1033"
       Scope="perMachine"
-      UpgradeCode="8F1C5F60-B7E7-4AB8-A58C-58CFAB6E4D4A">
-
-    <MajorUpgrade
-        DowngradeErrorMessage="Une version plus récente de SPK Display Server est déjà installée." />
-
+      UpgradeCode="C4E5A4B5-75A1-4FAE-8D5A-2E6818A2A5C7">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Local Display Server is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <StandardDirectory Id="ProgramFiles6432Folder">
-      <Directory Id="ManufacturerFolder" Name="Amusement SPK">
-        <Directory Id="INSTALLFOLDER" Name="Display Server">
+      <Directory Id="INSTALLFOLDER" Name="Local Display Server">
+        <Component Id="ServerServiceComponent" Guid="*">
+          <File Id="ServerExe" Source="$(ServerPublishDir)\DisplayServer.Server.exe" KeyPath="yes" />
+          <ServiceInstall Id="DisplayServerServiceInstall"
+              Name="LocalDisplayServer"
+              DisplayName="Local Display Server"
+              Description="Self-hosted HLS media signage server."
+              Start="auto" Type="ownProcess" ErrorControl="normal" Vital="yes">
+            <util:ServiceConfig FirstFailureActionType="restart"
+                SecondFailureActionType="restart"
+                ThirdFailureActionType="restart"
+                RestartServiceDelayInSeconds="5"
+                ResetPeriodInDays="1" />
+          </ServiceInstall>
+          <ServiceControl Id="DisplayServerServiceControl"
+              Name="LocalDisplayServer" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+          <firewall:FirewallException Id="DisplayServerFirewall8090"
+              Name="Local Display Server"
+              Description="Local-network access to the display server."
+              Port="8090" Protocol="tcp" Scope="localSubnet" Profile="all" />
+        </Component>
 
-          <Component Id="ServerServiceComponent" Guid="*">
-            <File
-                Id="ServerExe"
-                Source="$(ServerPublishDir)\SPK.Server.exe"
-                KeyPath="yes" />
-
-            <ServiceInstall
-                Id="SpkServiceInstall"
-                Name="AmusementSPKDisplayServer"
-                DisplayName="Amusement SPK Display Server"
-                Description="Serveur centralisé Roku / VIDAA d'Amusement SPK."
-                Start="auto"
-                Type="ownProcess"
-                ErrorControl="normal"
-                Vital="yes">
-
-              <util:ServiceConfig
-                  FirstFailureActionType="restart"
-                  SecondFailureActionType="restart"
-                  ThirdFailureActionType="restart"
-                  RestartServiceDelayInSeconds="5"
-                  ResetPeriodInDays="1" />
-            </ServiceInstall>
-
-            <ServiceControl
-                Id="SpkServiceControl"
-                Name="AmusementSPKDisplayServer"
-                Start="install"
-                Stop="both"
-                Remove="uninstall"
-                Wait="yes" />
-
-            <firewall:FirewallException
-                Id="SpkFirewall8090"
-                Name="Amusement SPK Display Server"
-                Description="Accès local au serveur d'affichage SPK."
-                Port="8090"
-                Protocol="tcp"
-                Scope="localSubnet"
-                Profile="all" />
+        <Directory Id="ManagerFolder" Name="Manager">
+          <Component Id="ManagerComponent" Guid="*">
+            <File Id="ManagerExe" Source="$(ManagerPublishDir)\DisplayServer.Manager.exe" KeyPath="yes">
+              <Shortcut Id="ManagerStartMenuShortcut"
+                  Directory="DisplayServerStartMenuFolder"
+                  Name="Display Server Manager"
+                  Description="Manage Local Display Server"
+                  WorkingDirectory="ManagerFolder" />
+            </File>
+            <RemoveFolder Id="RemoveDisplayServerStartMenuFolder" Directory="DisplayServerStartMenuFolder" On="uninstall" />
           </Component>
+        </Directory>
 
-          <Directory Id="ManagerFolder" Name="Manager">
-            <Component Id="ManagerComponent" Guid="*">
-              <File
-                  Id="ManagerExe"
-                  Source="$(ManagerPublishDir)\SPK.Server.Manager.exe"
-                  KeyPath="yes">
-                <Shortcut
-                    Id="ManagerStartMenuShortcut"
-                    Directory="SpkStartMenuFolder"
-                    Name="SPK Server Manager"
-                    Description="Gérer le serveur d'affichage Amusement SPK"
-                    WorkingDirectory="ManagerFolder" />
-              </File>
+        <Component Id="ThirdPartyNoticesComponent" Guid="*">
+          <File Id="ThirdPartyNotices" Source="$(sys.SOURCEFILEDIR)ThirdPartyNotices.txt" KeyPath="yes" />
+        </Component>
 
-              <RemoveFolder
-                  Id="RemoveSpkStartMenuFolder"
-                  Directory="SpkStartMenuFolder"
-                  On="uninstall" />
-            </Component>
-          </Directory>
-
-          <Component Id="ThirdPartyNoticesComponent" Guid="*">
-            <File
-                Id="ThirdPartyNotices"
-                Source="$(sys.SOURCEFILEDIR)ThirdPartyNotices.txt"
-                KeyPath="yes" />
+        <Directory Id="ToolsFolder" Name="Tools">
+          <Component Id="FfmpegComponent" Guid="*">
+            <File Id="FfmpegExe" Source="$(FfmpegExe)" Name="ffmpeg.exe" KeyPath="yes" />
           </Component>
-
-          <Directory Id="ToolsFolder" Name="Tools">
-            <Component Id="FfmpegComponent" Guid="*">
-              <File
-                  Id="FfmpegExe"
-                  Source="$(FfmpegExe)"
-                  Name="ffmpeg.exe"
-                  KeyPath="yes" />
-            </Component>
-
-            <Component Id="FfmpegVersionComponent" Guid="*">
-              <File
-                  Id="FfmpegVersion"
-                  Source="$(FfmpegVersionFile)"
-                  Name="ffmpeg.version.txt"
-                  KeyPath="yes" />
-            </Component>
-          </Directory>
-
+          <Component Id="FfmpegVersionComponent" Guid="*">
+            <File Id="FfmpegVersion" Source="$(FfmpegVersionFile)" Name="ffmpeg.version.txt" KeyPath="yes" />
+          </Component>
         </Directory>
       </Directory>
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="SpkStartMenuFolder" Name="Amusement SPK" />
+      <Directory Id="DisplayServerStartMenuFolder" Name="Local Display Server" />
     </StandardDirectory>
 
-    <Feature Id="MainFeature" Title="SPK Display Server" Level="1">
+    <Feature Id="MainFeature" Title="Local Display Server" Level="1">
       <ComponentRef Id="ServerServiceComponent" />
       <ComponentRef Id="ManagerComponent" />
       <ComponentRef Id="ThirdPartyNoticesComponent" />
       <ComponentRef Id="FfmpegComponent" />
       <ComponentRef Id="FfmpegVersionComponent" />
-
       <Files Include="$(ServerPublishDir)\**" Directory="INSTALLFOLDER">
-        <Exclude Files="$(ServerPublishDir)\SPK.Server.exe" />
+        <Exclude Files="$(ServerPublishDir)\DisplayServer.Server.exe" />
         <Exclude Files="$(ServerPublishDir)\**\*.pdb" />
       </Files>
-
       <Files Include="$(ManagerPublishDir)\**" Directory="ManagerFolder">
-        <Exclude Files="$(ManagerPublishDir)\SPK.Server.Manager.exe" />
+        <Exclude Files="$(ManagerPublishDir)\DisplayServer.Manager.exe" />
         <Exclude Files="$(ManagerPublishDir)\**\*.pdb" />
       </Files>
     </Feature>
 
-    <ui:WixUI
-        Id="WixUI_InstallDir"
-        InstallDirectory="INSTALLFOLDER" />
-
-    <WixVariable
-        Id="WixUILicenseRtf"
-        Value="$(sys.SOURCEFILEDIR)License.rtf" />
-
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)License.rtf" />
   </Package>
 </Wix>
