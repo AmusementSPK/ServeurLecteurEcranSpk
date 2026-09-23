@@ -1,0 +1,33 @@
+SPK Display Server - Third Party Notices
+========================================
+
+FFmpeg
+------
+This installer contains the FFmpeg command-line executable used for media
+conversion and HLS streaming.
+
+Windows build provider:
+https://www.gyan.dev/ffmpeg/builds/
+
+The Gyan FFmpeg builds used by this project are identified by the provider as
+64-bit static builds licensed under GPLv3 and include libx264.
+
+FFmpeg project:
+https://ffmpeg.org/
+
+FFmpeg source:
+https://github.com/FFmpeg/FFmpeg
+
+License information:
+https://ffmpeg.org/legal.html
+https://ffmpeg.org/doxygen/trunk/md_LICENSE.html
+
+When producing an installation package for distribution outside Amusement SPK,
+review the applicable FFmpeg/GPL redistribution requirements and preserve the
+corresponding source/version information for the exact FFmpeg build included.
+
+WiX Toolset
+-----------
+The MSI project is authored with WiX Toolset 5.0.2.
+
+https://wixtoolset.org/
