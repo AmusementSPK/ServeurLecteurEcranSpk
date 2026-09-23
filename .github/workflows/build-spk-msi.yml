@@ -119,7 +119,7 @@ jobs:
       - name: Collect MSI
         shell: pwsh
         run: |
-          $msi = Get-ChildItem Installer/Windows/bin/Release -Recurse -Filter '*.msi' | Select-Object -First 1
+          $msi = Get-ChildItem Installer/Windows/bin -Recurse -Filter '*.msi' | Select-Object -First 1
           if ($null -eq $msi) {
             throw 'Le MSI n a pas été généré.'
           }
