@@ -1,16 +1,14 @@
 using System.Diagnostics;
-using Microsoft.Extensions.Options;
-
 public sealed class VideoNormalizer
 {
-    private readonly StreamingOptions _cfg;
+    private readonly SpkPaths _paths;
     private readonly ILogger<VideoNormalizer> _logger;
 
     public VideoNormalizer(
-        IOptions<StreamingOptions> options,
+        SpkPaths paths,
         ILogger<VideoNormalizer> logger)
     {
-        _cfg = options.Value;
+        _paths = paths;
         _logger = logger;
     }
 
@@ -25,7 +23,7 @@ public sealed class VideoNormalizer
 
         var psi = new ProcessStartInfo
         {
-            FileName = _cfg.FfmpegPath,
+            FileName = _paths.FfmpegPath,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardError = true,
