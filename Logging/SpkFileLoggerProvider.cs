@@ -34,10 +34,17 @@ public sealed class SpkFileLoggerProvider : ILoggerProvider
         if (exception is not null)
             line += Environment.NewLine + exception;
 
-        lock (_gate)
+        try
         {
-            Directory.CreateDirectory(_paths.LogsRoot);
-            File.AppendAllText(path, line + Environment.NewLine);
+            lock (_gate)
+            {
+                Directory.CreateDirectory(_paths.LogsRoot);
+                File.AppendAllText(path, line + Environment.NewLine);
+            }
+        }
+        catch
+        {
+            // Un problème de journalisation ne doit jamais arrêter le serveur.
         }
     }
 
