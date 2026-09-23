@@ -347,14 +347,8 @@ $nextButton.Add_Click({
         $sleepValue = if ($sleepCheck.Checked) { "true" } else { "false" }
 
         try {
-            $WorkerProcess = Start-Process -FilePath "powershell.exe" -ArgumentList @(
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", $Worker,
-                "-Root", $Root,
-                "-StatusFile", $StatusFile,
-                "-PreventSleep", $sleepValue
-            ) -PassThru -WindowStyle Hidden
+            $workerArgs = '-NoProfile -ExecutionPolicy Bypass -File "' + $Worker + '" -Root "' + $Root + '" -StatusFile "' + $StatusFile + '" -PreventSleep "' + $sleepValue + '"'
+            $WorkerProcess = Start-Process -FilePath "powershell.exe" -ArgumentList $workerArgs -PassThru -WindowStyle Hidden
             $timer.Start()
         }
         catch {
