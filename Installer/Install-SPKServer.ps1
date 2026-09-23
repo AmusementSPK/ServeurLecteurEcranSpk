@@ -10,6 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $Root = [IO.Path]::GetFullPath($Root)
 $ToolsRoot = Join-Path $Root ".spk-tools"
@@ -65,6 +66,16 @@ function Assert-Administrator {
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         throw "L'installation doit être exécutée en administrateur."
+    }
+
+    $os = [Environment]::OSVersion.Version
+    if ($os.Major -lt 10) {
+        throw "Windows 10 ou plus récent est requis pour cet installateur."
+    }
+
+    $arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+    if ($arch -notmatch "AMD64|x64") {
+        throw "Cet installateur est prévu pour Windows 64 bits x64."
     }
 }
 
@@ -199,6 +210,11 @@ function Install-Ffmpeg {
     & $FfmpegExe -version | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "FFmpeg est présent, mais ne démarre pas correctement."
+    }
+
+    $encoders = & $FfmpegExe -hide_banner -encoders 2>&1
+    if (-not ($encoders | Select-String -SimpleMatch "libx264")) {
+        throw "Cette copie de FFmpeg ne contient pas l'encodeur libx264 requis par le serveur SPK."
     }
 
     Remove-Item -Recurse -Force $extract -ErrorAction SilentlyContinue
