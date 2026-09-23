@@ -1,0 +1,28 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <Platform>x64</Platform>
+    <OutputName>SPK-Display-Server-Setup</OutputName>
+    <SuppressValidation>true</SuppressValidation>
+
+    <ServerPublishDir Condition="'$(ServerPublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\server</ServerPublishDir>
+    <ManagerPublishDir Condition="'$(ManagerPublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\manager</ManagerPublishDir>
+    <FfmpegExe Condition="'$(FfmpegExe)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\ffmpeg\ffmpeg.exe</FfmpegExe>
+
+    <DefineConstants>
+      $(DefineConstants);
+      ServerPublishDir=$(ServerPublishDir);
+      ManagerPublishDir=$(ManagerPublishDir);
+      FfmpegExe=$(FfmpegExe)
+    </DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+    <PackageReference Include="WixToolset.Firewall.wixext" Version="5.0.2" />
+  </ItemGroup>
+
+</Project>
