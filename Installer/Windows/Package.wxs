@@ -4,7 +4,6 @@
      xmlns:firewall="http://wixtoolset.org/schemas/v4/wxs/firewall">
 
   <Package
-      Id="AmusementSPK.DisplayServer"
       Name="SPK Display Server"
       Manufacturer="Amusement SPK"
       Version="$(ProductVersion)"
