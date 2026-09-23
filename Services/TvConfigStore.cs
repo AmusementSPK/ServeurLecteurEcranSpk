@@ -5,7 +5,7 @@ public sealed class TvConfigStore
 {
     private readonly object _gate = new();
     private readonly StreamingOptions _cfg;
-    private readonly IHostEnvironment _environment;
+    private readonly SpkPaths _paths;
     private readonly ILogger<TvConfigStore> _logger;
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -17,11 +17,11 @@ public sealed class TvConfigStore
 
     public TvConfigStore(
         IOptions<StreamingOptions> options,
-        IHostEnvironment environment,
+        SpkPaths paths,
         ILogger<TvConfigStore> logger)
     {
         _cfg = options.Value;
-        _environment = environment;
+        _paths = paths;
         _logger = logger;
         Initialize();
     }
@@ -105,11 +105,8 @@ public sealed class TvConfigStore
 
     private void Initialize()
     {
-        var dataRoot = Path.GetFullPath(
-            Path.Combine(_environment.ContentRootPath, _cfg.DataFolder));
-
-        Directory.CreateDirectory(dataRoot);
-        _configPath = Path.Combine(dataRoot, "tvs.json");
+        Directory.CreateDirectory(_paths.ConfigRoot);
+        _configPath = Path.Combine(_paths.ConfigRoot, "tvs.json");
 
         lock (_gate)
         {
