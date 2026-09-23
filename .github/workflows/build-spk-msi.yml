@@ -1,4 +1,5 @@
 name: Build SPK MSI
+# build validation after WiX schema fix
 
 on:
   workflow_dispatch:
