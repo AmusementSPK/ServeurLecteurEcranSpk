@@ -6,6 +6,7 @@
     <Platform>x64</Platform>
     <OutputName>SPK-Display-Server-Setup</OutputName>
     <SuppressValidation>true</SuppressValidation>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
 
     <ServerPublishDir Condition="'$(ServerPublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\server</ServerPublishDir>
     <ManagerPublishDir Condition="'$(ManagerPublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\manager</ManagerPublishDir>
@@ -15,7 +16,8 @@
       $(DefineConstants);
       ServerPublishDir=$(ServerPublishDir);
       ManagerPublishDir=$(ManagerPublishDir);
-      FfmpegExe=$(FfmpegExe)
+      FfmpegExe=$(FfmpegExe);
+      ProductVersion=$(ProductVersion)
     </DefineConstants>
   </PropertyGroup>
 
