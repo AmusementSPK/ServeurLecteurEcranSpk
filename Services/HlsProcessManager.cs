@@ -5,7 +5,7 @@ public sealed class HlsProcessManager : BackgroundService
 {
     private readonly ILogger<HlsProcessManager> _logger;
     private readonly StreamingOptions _cfg;
-    private readonly IHostEnvironment _environment;
+    private readonly SpkPaths _paths;
     private readonly TvConfigStore _store;
     private readonly Dictionary<string, Process> _processes =
         new(StringComparer.OrdinalIgnoreCase);
@@ -15,12 +15,12 @@ public sealed class HlsProcessManager : BackgroundService
     public HlsProcessManager(
         ILogger<HlsProcessManager> logger,
         IOptions<StreamingOptions> options,
-        IHostEnvironment environment,
+        SpkPaths paths,
         TvConfigStore store)
     {
         _logger = logger;
         _cfg = options.Value;
-        _environment = environment;
+        _paths = paths;
         _store = store;
     }
 
@@ -183,7 +183,7 @@ public sealed class HlsProcessManager : BackgroundService
 
             var psi = new ProcessStartInfo
             {
-                FileName = _cfg.FfmpegPath,
+                FileName = _paths.FfmpegPath,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardError = true,
@@ -270,11 +270,9 @@ public sealed class HlsProcessManager : BackgroundService
         }
     }
 
-    private string GetMediaRoot() => Path.GetFullPath(
-        Path.Combine(_environment.ContentRootPath, _cfg.MediaFolder));
+    private string GetMediaRoot() => _paths.MediaRoot;
 
-    private string GetHlsRoot() => Path.GetFullPath(
-        Path.Combine(_environment.ContentRootPath, _cfg.HlsFolder));
+    private string GetHlsRoot() => _paths.HlsRoot;
 
     private static string? SafeResolveMediaPath(string mediaRoot, string relativePath)
     {
