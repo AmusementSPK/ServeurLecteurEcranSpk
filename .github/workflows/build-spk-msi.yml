@@ -134,6 +134,73 @@ jobs:
 
           Copy-Item (Join-Path $env:GITHUB_WORKSPACE 'artifacts\ffmpeg\ffmpeg.version.txt') $out -Force
 
+      - name: Install and smoke-test MSI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = Join-Path $env:GITHUB_WORKSPACE 'artifacts\msi\SPK-Display-Server-Setup.msi'
+          $installLog = Join-Path $env:GITHUB_WORKSPACE 'artifacts\msi\msi-install.log'
+          $uninstallLog = Join-Path $env:GITHUB_WORKSPACE 'artifacts\msi\msi-uninstall.log'
+
+          $installArgs = @('/i', $msi, '/qn', '/norestart', '/l*v', $installLog)
+          $install = Start-Process msiexec.exe -ArgumentList $installArgs -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            throw "Installation MSI échouée. Code=$($install.ExitCode). Voir $installLog"
+          }
+
+          $service = Get-Service -Name 'AmusementSPKDisplayServer' -ErrorAction Stop
+          $service.WaitForStatus([System.ServiceProcess.ServiceControllerStatus]::Running, (New-TimeSpan -Seconds 60))
+
+          $programRoot = Join-Path $env:ProgramFiles 'Amusement SPK\Display Server'
+          $managerExe = Join-Path $programRoot 'Manager\SPK.Server.Manager.exe'
+          $ffmpegExe = Join-Path $programRoot 'Tools\ffmpeg.exe'
+
+          if (-not (Test-Path $managerExe)) {
+            throw "SPK Server Manager introuvable après installation: $managerExe"
+          }
+          if (-not (Test-Path $ffmpegExe)) {
+            throw "FFmpeg introuvable après installation: $ffmpegExe"
+          }
+
+          $healthy = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Seconds 2
+            try {
+              $health = Invoke-RestMethod -UseBasicParsing 'http://127.0.0.1:8090/health' -TimeoutSec 5
+              if ($health.status -eq 'OK' -and $health.hlsSupervisorHealthy -eq $true) {
+                $healthy = $true
+                break
+              }
+            }
+            catch {
+            }
+          }
+
+          if (-not $healthy) {
+            throw 'Le service est installé mais /health n est pas devenu sain.'
+          }
+
+          $system = Invoke-RestMethod -UseBasicParsing 'http://127.0.0.1:8090/api/system' -TimeoutSec 5
+          if ($system.dataRoot -notlike '*Amusement SPK*Display Server*') {
+            throw "DataRoot inattendu: $($system.dataRoot)"
+          }
+          if ($system.ffmpeg -ne $ffmpegExe) {
+            throw "Chemin FFmpeg inattendu. API=$($system.ffmpeg) Attendu=$ffmpegExe"
+          }
+
+          $uninstallArgs = @('/x', $msi, '/qn', '/norestart', '/l*v', $uninstallLog)
+          $uninstall = Start-Process msiexec.exe -ArgumentList $uninstallArgs -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) {
+            throw "Désinstallation MSI échouée. Code=$($uninstall.ExitCode). Voir $uninstallLog"
+          }
+
+          Start-Sleep -Seconds 2
+          if (Get-Service -Name 'AmusementSPKDisplayServer' -ErrorAction SilentlyContinue) {
+            throw 'Le service SPK existe encore après désinstallation.'
+          }
+
+          Write-Host 'MSI installé, service sain, dépendances validées et désinstallation validée.'
+
       - name: Upload MSI artifact
         uses: actions/upload-artifact@v4
         with:
