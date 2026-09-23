@@ -97,10 +97,14 @@
                   Source="$(FfmpegExe)"
                   Name="ffmpeg.exe"
                   KeyPath="yes" />
+            </Component>
+
+            <Component Id="FfmpegVersionComponent" Guid="*">
               <File
                   Id="FfmpegVersion"
                   Source="$(FfmpegVersionFile)"
-                  Name="ffmpeg.version.txt" />
+                  Name="ffmpeg.version.txt"
+                  KeyPath="yes" />
             </Component>
           </Directory>
 
@@ -117,6 +121,7 @@
       <ComponentRef Id="ManagerComponent" />
       <ComponentRef Id="ThirdPartyNoticesComponent" />
       <ComponentRef Id="FfmpegComponent" />
+      <ComponentRef Id="FfmpegVersionComponent" />
 
       <Files Include="$(ServerPublishDir)\**" Directory="INSTALLFOLDER">
         <Exclude Files="$(ServerPublishDir)\SPK.Server.exe" />
