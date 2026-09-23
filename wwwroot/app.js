@@ -12,8 +12,8 @@ function showMessage(text, type = 'ok') {
 }
 
 function formatBytes(bytes) {
-    if (!bytes) return 'Aucun média';
-    const units = ['o', 'Ko', 'Mo', 'Go'];
+    if (!bytes) return 'No media';
+    const units = ['B', 'KB', 'MB', 'GB'];
     let value = bytes;
     let unit = 0;
     while (value >= 1024 && unit < units.length - 1) {
@@ -27,6 +27,22 @@ function absoluteStreamUrl(path) {
     return `${location.protocol}//${location.host}${path}`;
 }
 
+async function loadSystemInfo() {
+    try {
+        const response = await fetch('/api/system', { cache: 'no-store' });
+        if (!response.ok) return;
+        const data = await response.json();
+        const name = data.name || 'Local Display Server';
+        const tagline = data.tagline || 'Self-hosted media signage';
+        const brand = document.getElementById('brandName');
+        const taglineElement = document.getElementById('brandTagline');
+        if (brand) brand.textContent = name;
+        if (taglineElement) taglineElement.textContent = tagline;
+        document.title = name + ' - Screen management';
+    } catch {
+    }
+}
+
 async function loadTvs() {
     if (state.uploading.size > 0) return;
 
@@ -36,13 +52,13 @@ async function loadTvs() {
 
     try {
         const response = await fetch('/api/tvs', { cache: 'no-store' });
-        if (!response.ok) throw new Error('Impossible de charger les télévisions.');
+        if (!response.ok) throw new Error('Unable to load screens.');
         const data = await response.json();
         state.televisions = data.televisions ?? [];
         render();
-        document.getElementById('serverStatus').textContent = 'En ligne';
+        document.getElementById('serverStatus').textContent = 'Online';
     } catch (error) {
-        document.getElementById('serverStatus').textContent = 'Erreur';
+        document.getElementById('serverStatus').textContent = 'Error';
         showMessage(error.message, 'error');
     }
 }
@@ -53,7 +69,7 @@ function render() {
     document.getElementById('addTvBtn').disabled = false;
 
     if (state.televisions.length === 0) {
-        tvGrid.innerHTML = '<div class="empty">Aucune télévision configurée.</div>';
+        tvGrid.innerHTML = '<div class="empty">No screens configured.</div>';
         return;
     }
 
@@ -64,13 +80,13 @@ function render() {
         card.className = 'tv-card';
 
         let statusClass = 'missing';
-        let statusText = 'Pas de média';
+        let statusText = 'No media';
         if (tv.hasVideo && tv.running) {
             statusClass = 'running';
-            statusText = 'En diffusion';
+            statusText = 'Streaming';
         } else if (tv.hasVideo) {
             statusClass = '';
-            statusText = 'Démarrage…';
+            statusText = 'Starting…';
         }
 
         card.innerHTML = `
@@ -79,18 +95,18 @@ function render() {
                 <div class="status ${statusClass}">${statusText}</div>
             </div>
             <div class="field">
-                <label for="name-${escapeHtml(tv.id)}">Nom affiché</label>
+                <label for="name-${escapeHtml(tv.id)}">Display name</label>
                 <div class="name-row">
                     <input id="name-${escapeHtml(tv.id)}" type="text" maxlength="80" value="${escapeAttr(tv.name)}">
-                    <button class="secondary save-name" data-tv="${escapeAttr(tv.id)}">Enregistrer</button>
+                    <button class="secondary save-name" data-tv="${escapeAttr(tv.id)}">Save</button>
                 </div>
             </div>
             <div class="video-box">
                 <div class="video-meta">
-                    <strong>Média actuel :</strong> ${escapeHtml(tv.fileName)}<br>
+                    <strong>Current media:</strong> ${escapeHtml(tv.fileName)}<br>
                     ${tv.hasVideo
-                        ? `${formatBytes(tv.fileSize)}${tv.lastModified ? ` · modifié ${new Date(tv.lastModified).toLocaleString('fr-CA')}` : ''}`
-                        : 'Aucun média pour cette TV'}
+                        ? `${formatBytes(tv.fileSize)}${tv.lastModified ? ` · modified ${new Date(tv.lastModified).toLocaleString()}` : ''}`
+                        : 'No media pour cette TV'}
                 </div>
 
                 <input
@@ -100,11 +116,11 @@ function render() {
                     accept="video/*,image/*,.mp4,.mov,.m4v,.mkv,.webm,.avi,.mpeg,.mpg,.wmv,.flv,.mts,.m2ts,.3gp,.jpg,.jpeg,.png,.webp,.bmp,.gif,.tif,.tiff,.avif,.heic,.heif,.jfif">
 
                 <div class="file-row">
-                    <button class="secondary choose-video" data-tv="${escapeAttr(tv.id)}">Choisir / changer le fichier</button>
-                    <button class="primary upload-video" data-tv="${escapeAttr(tv.id)}" disabled>Envoyer et appliquer</button>
+                    <button class="secondary choose-video" data-tv="${escapeAttr(tv.id)}">Choose / change file</button>
+                    <button class="primary upload-video" data-tv="${escapeAttr(tv.id)}" disabled>Upload and apply</button>
                 </div>
 
-                <div class="selected-file" id="selected-file-${escapeHtml(tv.id)}">Aucun fichier choisi</div>
+                <div class="selected-file" id="selected-file-${escapeHtml(tv.id)}">No file selected</div>
                 <div class="upload-state" id="upload-state-${escapeHtml(tv.id)}"></div>
 
                 <div class="progress-wrap" id="progress-wrap-${escapeHtml(tv.id)}">
@@ -113,7 +129,7 @@ function render() {
             </div>
             <div class="stream-row">
                 <div class="stream-url" title="${escapeAttr(absoluteStreamUrl(tv.streamUrl))}">${escapeHtml(absoluteStreamUrl(tv.streamUrl))}</div>
-                <button class="ghost copy-url" data-url="${escapeAttr(absoluteStreamUrl(tv.streamUrl))}">Copier</button>
+                <button class="ghost copy-url" data-url="${escapeAttr(absoluteStreamUrl(tv.streamUrl))}">Copy</button>
             </div>`;
 
         tvGrid.appendChild(card);
@@ -133,9 +149,10 @@ function bindCardEvents() {
                 body: JSON.stringify({ name: input.value })
             });
             const data = await response.json().catch(() => ({}));
-            if (!response.ok) return showMessage(data.error || 'Impossible de renommer la TV.', 'error');
-            showMessage(`TV ${id} renommée « ${data.name} ».`);
-            await loadTvs();
+            if (!response.ok) return showMessage(data.error || 'Unable to rename screen.', 'error');
+            showMessage(`TV ${id} renamed « ${data.name} ».`);
+            await loadSystemInfo();
+loadTvs();
         });
     });
 
@@ -157,7 +174,7 @@ function bindCardEvents() {
             const uploadState = document.getElementById(`upload-state-${id}`);
 
             if (!file) {
-                label.textContent = 'Aucun fichier choisi';
+                label.textContent = 'No file selected';
                 uploadButton.disabled = true;
                 uploadState.textContent = '';
                 return;
@@ -166,8 +183,8 @@ function bindCardEvents() {
             label.textContent = `${file.name} · ${formatBytes(file.size)}`;
             uploadButton.disabled = false;
             uploadState.textContent = file.type && file.type.startsWith('image/')
-                ? 'Prêt à envoyer. L’image sera transformée en MP4 fixe de 10 secondes.'
-                : 'Prêt à envoyer. Le serveur préparera automatiquement le fichier.';
+                ? 'Ready to upload. The image will be converted to a 10-second still MP4.'
+                : 'Ready to upload. The server will normalize the file automatically.';
         });
     });
 
@@ -178,9 +195,9 @@ function bindCardEvents() {
         button.addEventListener('click', async () => {
             try {
                 await navigator.clipboard.writeText(button.dataset.url);
-                showMessage('Adresse du flux copiée.');
+                showMessage('Stream URL copied.');
             } catch {
-                showMessage('Impossible de copier automatiquement. Sélectionne l’adresse manuellement.', 'error');
+                showMessage('Could not copy automatically. Select the URL manually.', 'error');
             }
         });
     });
@@ -191,7 +208,7 @@ function uploadMedia(id) {
 
     const input = document.getElementById(`file-${id}`);
     const file = input.files && input.files[0];
-    if (!file) return showMessage('Choisis d’abord un fichier.', 'error');
+    if (!file) return showMessage('Choose a file first.', 'error');
 
     const form = new FormData();
     form.append('video', file, file.name);
@@ -207,7 +224,7 @@ function uploadMedia(id) {
     chooseButton.disabled = true;
     wrap.style.display = 'block';
     bar.style.width = '0%';
-    uploadState.textContent = 'Envoi du fichier au serveur…';
+    uploadState.textContent = 'Uploading file to server…';
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `/api/tvs/${encodeURIComponent(id)}/video`);
@@ -216,13 +233,13 @@ function uploadMedia(id) {
         if (event.lengthComputable) {
             const percent = Math.round(event.loaded / event.total * 100);
             bar.style.width = `${percent}%`;
-            uploadState.textContent = `Envoi au serveur : ${percent} %`;
+            uploadState.textContent = `Upload: ${percent} %`;
         }
     };
 
     xhr.upload.onload = () => {
         bar.style.width = '100%';
-        uploadState.textContent = 'Fichier reçu. Conversion automatique en MP4 en cours…';
+        uploadState.textContent = 'File received. Automatic MP4 conversion in progress…';
     };
 
     xhr.onload = () => {
@@ -233,10 +250,10 @@ function uploadMedia(id) {
         chooseButton.disabled = false;
 
         if (xhr.status >= 200 && xhr.status < 300) {
-            uploadState.textContent = `Terminé : ${data.fileName || 'média.mp4'} est maintenant en diffusion.`;
-            showMessage(`TV ${id} : ${data.fileName || 'le média'} est maintenant en ligne.`);
+            uploadState.textContent = `Done: ${data.fileName || 'média.mp4'} is now streaming.`;
+            showMessage(`TV ${id} : ${data.fileName || 'the media'} is now online.`);
             input.value = '';
-            document.getElementById(`selected-file-${id}`).textContent = 'Aucun fichier choisi';
+            document.getElementById(`selected-file-${id}`).textContent = 'No file selected';
 
             setTimeout(() => {
                 wrap.style.display = 'none';
@@ -246,8 +263,8 @@ function uploadMedia(id) {
         } else {
             uploadButton.disabled = false;
             wrap.style.display = 'none';
-            uploadState.textContent = 'Échec de la conversion ou de l’envoi.';
-            showMessage(data.error || data.detail || data.title || 'Échec de l’envoi du média.', 'error');
+            uploadState.textContent = 'Conversion or upload failed.';
+            showMessage(data.error || data.detail || data.title || 'Media upload failed.', 'error');
         }
     };
 
@@ -256,8 +273,8 @@ function uploadMedia(id) {
         uploadButton.disabled = false;
         chooseButton.disabled = false;
         wrap.style.display = 'none';
-        uploadState.textContent = 'Connexion interrompue.';
-        showMessage('Connexion interrompue pendant l’envoi.', 'error');
+        uploadState.textContent = 'Connection interrupted.';
+        showMessage('Connection interrupted during upload.', 'error');
     };
 
     xhr.send(form);
@@ -296,9 +313,9 @@ document.getElementById('addTvForm').addEventListener('submit', async event => {
         body: JSON.stringify({ name })
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) return showMessage(data.error || 'Impossible de créer la TV.', 'error');
+    if (!response.ok) return showMessage(data.error || 'Unable to create screen.', 'error');
     addTvDialog.close();
-    showMessage(`TV ${data.id} « ${data.name} » créée.`);
+    showMessage(`TV ${data.id} « ${data.name} » created.`);
     await loadTvs();
 });
 

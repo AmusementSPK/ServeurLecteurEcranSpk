@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 
-var STORAGE_KEY='spk.vidaa.tvId';
+var STORAGE_KEY='displayserver.vidaa.tvId';
 var RETRY_MS=5000;
 var AUTO_SCROLL_EDGE=130;
 var AUTO_SCROLL_STEP=22;
@@ -14,6 +14,7 @@ var title=document.getElementById('title');
 var subtitle=document.getElementById('subtitle');
 var status=document.getElementById('status');
 var toast=document.getElementById('toast');
+var brand=document.getElementById('brandName');
 
 var tvs=[];
 var selectedIndex=0;
@@ -25,6 +26,20 @@ var lastHandledAt=0;
 var autoScrollDirection=0;
 
 function apiUrl(){return '/api/tvs';}
+
+function loadBranding(){
+  var xhr=new XMLHttpRequest();
+  xhr.open('GET','/api/system?r='+new Date().getTime(),true);
+  xhr.onreadystatechange=function(){
+    if(xhr.readyState!==4||xhr.status<200||xhr.status>=300) return;
+    try{
+      var data=JSON.parse(xhr.responseText);
+      if(brand&&data&&data.name) brand.innerHTML=escapeHtml(data.name);
+      if(data&&data.name) document.title=data.name+' Player';
+    }catch(e){}
+  };
+  xhr.send(null);
+}
 function streamUrl(id){return '/hls/tv'+encodeURIComponent(id)+'/index.m3u8';}
 function selectorVisible(){return overlay.className.indexOf('hidden')===-1;}
 
@@ -46,8 +61,8 @@ function showToast(message){
 }
 
 function loadTvs(forceSelector){
-  title.innerHTML='Choisir cette télévision';
-  subtitle.innerHTML='Déplace la souris sur la télévision voulue puis clique dessus.';
+  title.innerHTML='Choose this screen';
+  subtitle.innerHTML='Move the pointer over the screen you want, then click it.';
   status.innerHTML='';
   showOverlay();
 
@@ -58,19 +73,19 @@ function loadTvs(forceSelector){
     if(xhr.readyState!==4) return;
 
     if(xhr.status<200||xhr.status>=300){
-      showLoadError('Serveur inaccessible ('+xhr.status+').',forceSelector);
+      showLoadError('Server unreachable ('+xhr.status+').',forceSelector);
       return;
     }
 
     var data=null;
     try{data=JSON.parse(xhr.responseText);}catch(e){
-      showLoadError('Réponse serveur invalide.',forceSelector);
+      showLoadError('Invalid server response.',forceSelector);
       return;
     }
 
     tvs=(data&&data.televisions)||[];
     if(!tvs.length){
-      showLoadError('Aucune télévision configurée sur le serveur.',forceSelector);
+      showLoadError('No screens are configured on the server.',forceSelector);
       return;
     }
 
@@ -88,21 +103,21 @@ function loadTvs(forceSelector){
 
     renderSelector(saved);
   };
-  xhr.onerror=function(){showLoadError('Connexion au serveur impossible.',forceSelector);};
+  xhr.onerror=function(){showLoadError('Unable to connect to server.',forceSelector);};
   xhr.send(null);
 }
 
 function showLoadError(message,forceSelector){
   list.innerHTML='';
-  subtitle.innerHTML='Impossible de récupérer la liste.';
-  status.innerHTML=message+' Nouvelle tentative dans 5 secondes.';
+  subtitle.innerHTML='Unable to load the screen list.';
+  status.innerHTML=message+' Retrying in 5 seconds.';
   clearTimeout(retryTimer);
   retryTimer=setTimeout(function(){loadTvs(forceSelector);},RETRY_MS);
 }
 
 function renderSelector(savedId){
   list.innerHTML='';
-  subtitle.innerHTML='Souris + clic gauche pour choisir. Place le curseur en bas ou en haut de l’écran pour faire défiler.';
+  subtitle.innerHTML='Mouse + left click to choose. Move the pointer to the top or bottom edge to auto-scroll.';
   selectedIndex=0;
 
   for(var i=0;i<tvs.length;i++){
@@ -178,7 +193,7 @@ function updateSelection(moveFocus){
     if(moveFocus===true&&current.focus){
       try{current.focus();}catch(e){}
     }
-    if(current.scrollIntoView){
+    if(moveFocus===true&&current.scrollIntoView){
       try{current.scrollIntoView(false);}catch(e2){}
     }
   }
@@ -209,8 +224,8 @@ function startTv(tv){
 
   try{
     var promise=player.play();
-    if(promise&&promise.catch){promise.catch(function(){showToast('Clique une fois pour démarrer la vidéo.');});}
-  }catch(e4){showToast('Clique une fois pour démarrer la vidéo.');}
+    if(promise&&promise.catch){promise.catch(function(){showToast('Click once to start playback.');});}
+  }catch(e4){showToast('Click once to start playback.');}
 }
 
 function resumeCurrentTv(){
@@ -239,12 +254,12 @@ function openSelector(){
   loadTvs(true);
 }
 
-player.addEventListener('error',function(){showToast('Flux interrompu - reconnexion automatique');recoverPlayback();},false);
+player.addEventListener('error',function(){showToast('Stream interrupted - reconnecting automatically');recoverPlayback();},false);
 player.addEventListener('ended',recoverPlayback,false);
 player.addEventListener('stalled',recoverPlayback,false);
 
-// Mode principal sur cette TV WELCOME : souris.
-// Pendant la vidéo, un clic gauche n'importe où rouvre le choix des télévisions.
+// Primary interaction mode: mouse/pointer.
+// During playback, a left click anywhere reopens the screen selector.
 document.addEventListener('mousedown',function(event){
   event=event||window.event||{};
   var button=(event.button===undefined)?0:event.button;
@@ -264,8 +279,8 @@ player.addEventListener('click',function(event){
   return false;
 },false);
 
-// Auto-scroll VIDAA : le curseur au bas de l'écran descend la liste,
-// le curseur en haut la remonte. Aucun bouton Chaîne requis.
+// VIDAA auto-scroll: moving the pointer to the bottom scrolls down,
+// moving it to the top scrolls up.
 document.addEventListener('mousemove',function(event){
   if(!selectorVisible()){
     autoScrollDirection=0;
@@ -303,7 +318,7 @@ function cancelMouse(event){
   event.returnValue=false;
 }
 
-// Navigation télécommande conservée en bonus pour tester Haut/Bas + OK.
+// Remote-control navigation is also supported: Up/Down + OK.
 function normalizeKey(event){
   event=event||window.event||{};
   var key=event.key||event.keyIdentifier||'';
@@ -400,5 +415,6 @@ document.addEventListener('visibilitychange',function(){
   }
 },false);
 
+loadBranding();
 loadTvs(false);
 })();

@@ -1,34 +1,34 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>SPK - Gestion des menus TV</title>
+    <title>Local Display Server - Screen management</title>
     <link rel="stylesheet" href="/styles.css?v=2">
 </head>
 <body>
     <main class="shell">
         <header class="topbar">
             <div>
-                <div class="eyebrow">AMUSEMENT SPK</div>
-                <h1>Gestion des menus TV</h1>
-                <p>Change les vidéos ou images, renomme les télévisions et ajoute de nouveaux écrans sans toucher au serveur.</p>
+                <div id="brandName" class="eyebrow">LOCAL DISPLAY SERVER</div>
+                <h1>Screen management</h1>
+                <p id="brandTagline">Self-hosted media signage</p>
             </div>
-            <button id="refreshBtn" class="secondary">Actualiser</button>
+            <button id="refreshBtn" class="secondary">Refresh</button>
         </header>
 
         <section class="summary" aria-live="polite">
-            <div class="summary-card"><span>Télévisions</span><strong id="tvCount">—</strong></div>
-            <div class="summary-card"><span>Flux actifs</span><strong id="runningCount">—</strong></div>
-            <div class="summary-card"><span>Serveur</span><strong id="serverStatus">Connexion…</strong></div>
+            <div class="summary-card"><span>Screens</span><strong id="tvCount">—</strong></div>
+            <div class="summary-card"><span>Active streams</span><strong id="runningCount">—</strong></div>
+            <div class="summary-card"><span>Server</span><strong id="serverStatus">Connecting…</strong></div>
         </section>
 
         <section class="section-head">
             <div>
-                <h2>Écrans</h2>
-                <p>Choisis une vidéo ou une image depuis n’importe quel ordinateur du réseau. Les images deviennent automatiquement des MP4 fixes de 10 secondes.</p>
+                <h2>Displays</h2>
+                <p>Upload a video or image from any computer on your local network. Images are automatically converted to 10-second still MP4 files.</p>
             </div>
-            <button id="addTvBtn" class="primary">+ Ajouter une télé</button>
+            <button id="addTvBtn" class="primary">+ Add screen</button>
         </section>
 
         <div id="message" class="message hidden"></div>
@@ -37,19 +37,19 @@
 
     <dialog id="addTvDialog" class="dialog">
         <form id="addTvForm" method="dialog">
-            <h3>Ajouter une télévision</h3>
-            <p>Le prochain numéro libre sera attribué automatiquement.</p>
+            <h3>Add a screen</h3>
+            <p>The next available numeric ID is assigned automatically.</p>
             <label>
-                Nom de la télévision
-                <input id="newTvName" name="name" maxlength="80" placeholder="Ex. Menu bar, Menu cuisine, Promo">
+                Display name
+                <input id="newTvName" name="name" maxlength="80" placeholder="e.g. Lobby, Menu board, Promotion">
             </label>
             <div class="dialog-actions">
-                <button type="button" id="cancelAddTv" class="secondary">Annuler</button>
-                <button type="submit" class="primary">Créer la télé</button>
+                <button type="button" id="cancelAddTv" class="secondary">Cancel</button>
+                <button type="submit" class="primary">Create screen</button>
             </div>
         </form>
     </dialog>
 
-    <script src="/app.js?v=6"></script>
+    <script src="/app.js?v=7"></script>
 </body>
 </html>
