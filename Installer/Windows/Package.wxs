@@ -70,15 +70,15 @@
                   KeyPath="yes">
                 <Shortcut
                     Id="ManagerStartMenuShortcut"
-                    Directory="StartMenuFolder"
+                    Directory="SpkStartMenuFolder"
                     Name="SPK Server Manager"
                     Description="Gérer le serveur d'affichage Amusement SPK"
                     WorkingDirectory="ManagerFolder" />
               </File>
 
               <RemoveFolder
-                  Id="RemoveStartMenuFolder"
-                  Directory="StartMenuFolder"
+                  Id="RemoveSpkStartMenuFolder"
+                  Directory="SpkStartMenuFolder"
                   On="uninstall" />
             </Component>
           </Directory>
@@ -109,7 +109,7 @@
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="StartMenuFolder" Name="Amusement SPK" />
+      <Directory Id="SpkStartMenuFolder" Name="Amusement SPK" />
     </StandardDirectory>
 
     <Feature Id="MainFeature" Title="SPK Display Server" Level="1">
