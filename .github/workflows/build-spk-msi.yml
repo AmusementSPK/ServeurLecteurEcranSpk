@@ -79,12 +79,13 @@ jobs:
 
           Copy-Item $ffmpeg.FullName (Join-Path $outputDir 'ffmpeg.exe') -Force
 
-          & (Join-Path $outputDir 'ffmpeg.exe') -hide_banner -encoders |
-            Select-String -SimpleMatch 'libx264' |
-            Out-Null
-
+          $encoders = & (Join-Path $outputDir 'ffmpeg.exe') -hide_banner -encoders 2>&1
           if ($LASTEXITCODE -ne 0) {
             throw 'FFmpeg ne démarre pas correctement.'
+          }
+
+          if (-not ($encoders | Select-String -SimpleMatch 'libx264')) {
+            throw 'La copie de FFmpeg téléchargée ne contient pas libx264.'
           }
 
       - name: Build MSI
@@ -93,12 +94,14 @@ jobs:
           $server = Join-Path $env:GITHUB_WORKSPACE 'artifacts\server'
           $manager = Join-Path $env:GITHUB_WORKSPACE 'artifacts\manager'
           $ffmpeg = Join-Path $env:GITHUB_WORKSPACE 'artifacts\ffmpeg\ffmpeg.exe'
+          $ffmpegVersion = Join-Path $env:GITHUB_WORKSPACE 'artifacts\ffmpeg\ffmpeg.version.txt'
 
           dotnet build Installer/Windows/SPK.DisplayServer.Setup.wixproj `
             -c Release `
             -p:ServerPublishDir="$server" `
             -p:ManagerPublishDir="$manager" `
             -p:FfmpegExe="$ffmpeg" `
+            -p:FfmpegVersionFile="$ffmpegVersion" `
             -p:ProductVersion="1.0.${{ github.run_number }}"
 
       - name: Collect MSI
