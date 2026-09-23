@@ -1,4 +1,5 @@
 name: Validate SPK Installer
+# final validation
 
 on:
   push:
