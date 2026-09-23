@@ -7,7 +7,7 @@
       Id="AmusementSPK.DisplayServer"
       Name="SPK Display Server"
       Manufacturer="Amusement SPK"
-      Version="1.0.0"
+      Version="$(ProductVersion)"
       Language="1036"
       Scope="perMachine"
       UpgradeCode="8F1C5F60-B7E7-4AB8-A58C-58CFAB6E4D4A">
