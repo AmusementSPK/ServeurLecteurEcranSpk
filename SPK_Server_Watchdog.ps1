@@ -21,6 +21,16 @@ function Write-WatchdogLog([string]$Message) {
     Add-Content -Path $WatchdogLog -Value $line -Encoding UTF8
 }
 
+function Test-NativeServiceInstalled {
+    try {
+        $service = Get-Service -Name "AmusementSPKDisplayServer" -ErrorAction SilentlyContinue
+        return ($null -ne $service)
+    }
+    catch {
+        return $false
+    }
+}
+
 function Test-Health {
     try {
         $response = Invoke-WebRequest -UseBasicParsing -Uri $HealthUrl -TimeoutSec 5
@@ -107,6 +117,11 @@ if (-not $createdNew) {
 try {
     Write-WatchdogLog "Watchdog SPK demarre."
     while ($true) {
+        if (Test-NativeServiceInstalled) {
+            Write-WatchdogLog "Le nouveau service Windows SPK est installé. Arrêt définitif du watchdog legacy."
+            break
+        }
+
         Remove-OldLogs
         $dotnetPath = Resolve-Dotnet
         if ([string]::IsNullOrWhiteSpace($dotnetPath)) {
@@ -134,7 +149,12 @@ try {
 
         if (Test-Health) {
             Write-WatchdogLog "Une instance saine existe deja sur le port 8090. Surveillance sans doublon."
-            while (Test-Health) { Start-Sleep -Seconds 10 }
+            while ((Test-Health) -and -not (Test-NativeServiceInstalled)) { Start-Sleep -Seconds 10 }
+
+            if (Test-NativeServiceInstalled) {
+                Write-WatchdogLog "Le nouveau service Windows SPK a pris le relais. Arrêt du watchdog legacy."
+                break
+            }
             Write-WatchdogLog "L instance existante ne repond plus. Prise en charge par le watchdog."
             Stop-StaleSpkOnPort
             Start-Sleep -Seconds 3
