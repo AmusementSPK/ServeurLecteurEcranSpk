@@ -62,24 +62,26 @@
                 Profile="all" />
           </Component>
 
-          <Component Id="ManagerComponent" Guid="*">
-            <File
-                Id="ManagerExe"
-                Source="$(ManagerPublishDir)\SPK.Server.Manager.exe"
-                KeyPath="yes">
-              <Shortcut
-                  Id="ManagerStartMenuShortcut"
-                  Directory="StartMenuFolder"
-                  Name="SPK Server Manager"
-                  Description="Gérer le serveur d'affichage Amusement SPK"
-                  WorkingDirectory="INSTALLFOLDER" />
-            </File>
+          <Directory Id="ManagerFolder" Name="Manager">
+            <Component Id="ManagerComponent" Guid="*">
+              <File
+                  Id="ManagerExe"
+                  Source="$(ManagerPublishDir)\SPK.Server.Manager.exe"
+                  KeyPath="yes">
+                <Shortcut
+                    Id="ManagerStartMenuShortcut"
+                    Directory="StartMenuFolder"
+                    Name="SPK Server Manager"
+                    Description="Gérer le serveur d'affichage Amusement SPK"
+                    WorkingDirectory="ManagerFolder" />
+              </File>
 
-            <RemoveFolder
-                Id="RemoveStartMenuFolder"
-                Directory="StartMenuFolder"
-                On="uninstall" />
-          </Component>
+              <RemoveFolder
+                  Id="RemoveStartMenuFolder"
+                  Directory="StartMenuFolder"
+                  On="uninstall" />
+            </Component>
+          </Directory>
 
           <Component Id="ThirdPartyNoticesComponent" Guid="*">
             <File
@@ -119,6 +121,11 @@
       <Files Include="$(ServerPublishDir)\**" Directory="INSTALLFOLDER">
         <Exclude Files="$(ServerPublishDir)\SPK.Server.exe" />
         <Exclude Files="$(ServerPublishDir)\**\*.pdb" />
+      </Files>
+
+      <Files Include="$(ManagerPublishDir)\**" Directory="ManagerFolder">
+        <Exclude Files="$(ManagerPublishDir)\SPK.Server.Manager.exe" />
+        <Exclude Files="$(ManagerPublishDir)\**\*.pdb" />
       </Files>
     </Feature>
 
