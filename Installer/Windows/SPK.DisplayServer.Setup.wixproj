@@ -11,12 +11,14 @@
     <ServerPublishDir Condition="'$(ServerPublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\server</ServerPublishDir>
     <ManagerPublishDir Condition="'$(ManagerPublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\manager</ManagerPublishDir>
     <FfmpegExe Condition="'$(FfmpegExe)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\ffmpeg\ffmpeg.exe</FfmpegExe>
+    <FfmpegVersionFile Condition="'$(FfmpegVersionFile)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\ffmpeg\ffmpeg.version.txt</FfmpegVersionFile>
 
     <DefineConstants>
       $(DefineConstants);
       ServerPublishDir=$(ServerPublishDir);
       ManagerPublishDir=$(ManagerPublishDir);
       FfmpegExe=$(FfmpegExe);
+      FfmpegVersionFile=$(FfmpegVersionFile);
       ProductVersion=$(ProductVersion)
     </DefineConstants>
   </PropertyGroup>
