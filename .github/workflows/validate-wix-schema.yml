@@ -4,6 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
+      - 'Installer/Windows/**'
       - '.github/workflows/validate-wix-schema.yml'
 
 permissions:
