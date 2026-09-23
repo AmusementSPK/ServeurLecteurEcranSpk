@@ -151,8 +151,7 @@ function bindCardEvents() {
             const data = await response.json().catch(() => ({}));
             if (!response.ok) return showMessage(data.error || 'Unable to rename screen.', 'error');
             showMessage(`TV ${id} renamed « ${data.name} ».`);
-            await loadSystemInfo();
-loadTvs();
+            await loadTvs();
         });
     });
 
@@ -319,4 +318,5 @@ document.getElementById('addTvForm').addEventListener('submit', async event => {
     await loadTvs();
 });
 
+loadSystemInfo();
 loadTvs();
