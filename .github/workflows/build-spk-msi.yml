@@ -1,0 +1,127 @@
+name: Build SPK MSI
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-spk-msi.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-msi:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish SPK Server
+        shell: pwsh
+        run: |
+          dotnet publish SPK.Streaming.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -o "$env:GITHUB_WORKSPACE\artifacts\server"
+
+      - name: Publish SPK Server Manager
+        shell: pwsh
+        run: |
+          dotnet publish Manager/SPK.Server.Manager.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -o "$env:GITHUB_WORKSPACE\artifacts\manager"
+
+      - name: Download and verify FFmpeg
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+
+          $downloadDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts\ffmpeg-download'
+          $outputDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts\ffmpeg'
+          New-Item -ItemType Directory -Force -Path $downloadDir, $outputDir | Out-Null
+
+          $zip = Join-Path $downloadDir 'ffmpeg-release-essentials.zip'
+          $sha = Join-Path $downloadDir 'ffmpeg-release-essentials.zip.sha256'
+          $ver = Join-Path $outputDir 'ffmpeg.version.txt'
+
+          Invoke-WebRequest -UseBasicParsing 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip' -OutFile $zip
+          Invoke-WebRequest -UseBasicParsing 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip.sha256' -OutFile $sha
+          Invoke-WebRequest -UseBasicParsing 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip.ver' -OutFile $ver
+
+          $match = [regex]::Match((Get-Content -Raw $sha), '(?i)\b[a-f0-9]{64}\b')
+          if (-not $match.Success) {
+            throw 'Impossible de lire le SHA-256 officiel de FFmpeg.'
+          }
+
+          $expected = $match.Value.ToUpperInvariant()
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToUpperInvariant()
+          if ($expected -ne $actual) {
+            throw "SHA-256 FFmpeg invalide. Attendu=$expected Reçu=$actual"
+          }
+
+          $extract = Join-Path $downloadDir 'extract'
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+
+          $ffmpeg = Get-ChildItem $extract -Recurse -Filter 'ffmpeg.exe' -File | Select-Object -First 1
+          if ($null -eq $ffmpeg) {
+            throw 'ffmpeg.exe introuvable dans l archive.'
+          }
+
+          Copy-Item $ffmpeg.FullName (Join-Path $outputDir 'ffmpeg.exe') -Force
+
+          & (Join-Path $outputDir 'ffmpeg.exe') -hide_banner -encoders |
+            Select-String -SimpleMatch 'libx264' |
+            Out-Null
+
+          if ($LASTEXITCODE -ne 0) {
+            throw 'FFmpeg ne démarre pas correctement.'
+          }
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          $server = Join-Path $env:GITHUB_WORKSPACE 'artifacts\server'
+          $manager = Join-Path $env:GITHUB_WORKSPACE 'artifacts\manager'
+          $ffmpeg = Join-Path $env:GITHUB_WORKSPACE 'artifacts\ffmpeg\ffmpeg.exe'
+
+          dotnet build Installer/Windows/SPK.DisplayServer.Setup.wixproj `
+            -c Release `
+            -p:ServerPublishDir="$server" `
+            -p:ManagerPublishDir="$manager" `
+            -p:FfmpegExe="$ffmpeg"
+
+      - name: Collect MSI
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem Installer/Windows/bin/Release -Recurse -Filter '*.msi' | Select-Object -First 1
+          if ($null -eq $msi) {
+            throw 'Le MSI n a pas été généré.'
+          }
+
+          $out = Join-Path $env:GITHUB_WORKSPACE 'artifacts\msi'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item $msi.FullName (Join-Path $out 'SPK-Display-Server-Setup.msi') -Force
+
+          $hash = (Get-FileHash (Join-Path $out 'SPK-Display-Server-Setup.msi') -Algorithm SHA256).Hash
+          "SHA256  SPK-Display-Server-Setup.msi  $hash" |
+            Set-Content (Join-Path $out 'SPK-Display-Server-Setup.sha256.txt')
+
+          Copy-Item (Join-Path $env:GITHUB_WORKSPACE 'artifacts\ffmpeg\ffmpeg.version.txt') $out -Force
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SPK-Display-Server-Setup
+          path: artifacts/msi/*
+          if-no-files-found: error
+          retention-days: 30
