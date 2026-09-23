@@ -399,7 +399,7 @@ public sealed class MainForm : Form
         Process.Start(new ProcessStartInfo
         {
             FileName = "explorer.exe",
-            Arguments = $""{path}"",
+            Arguments = $"\"{path}\"",
             UseShellExecute = true
         });
     }
