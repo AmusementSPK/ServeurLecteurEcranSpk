@@ -61,8 +61,38 @@ Conséquences :
 Le fichier Roku config/server.env contient seulement l'adresse IP et le port du serveur.
 
 
-INSTALLATION - SERVEUR PERMANENT
---------------------------------
+INSTALLATION CLE EN MAIN
+------------------------
+Pour installer le serveur sur un nouveau PC Windows :
+
+1. Télécharge ou clone le repo complet.
+2. Double-clique :
+       INSTALLER_SPK.bat
+3. Accepte la demande administrateur Windows.
+4. Suis le wizard.
+5. Quand l'écran « Serveur SPK prêt » apparaît, l'installation est terminée.
+
+Le wizard s'occupe automatiquement de :
+- télécharger .NET 10 dans .spk-tools\dotnet;
+- télécharger FFmpeg dans .spk-tools\ffmpeg;
+- vérifier le SHA-256 du téléchargement FFmpeg;
+- compiler le serveur en Release;
+- configurer le pare-feu Windows pour le port 8090 sur le réseau local;
+- installer le watchdog;
+- créer la tâche Windows « Amusement SPK - Serveur TV » sous SYSTEM;
+- démarrer le serveur;
+- vérifier /health avant d'annoncer la réussite;
+- désactiver, si l'option reste cochée, la mise en veille secteur.
+
+Le wizard peut être relancé sur un serveur déjà installé pour réparer/réinstaller
+les dépendances et la configuration sans supprimer Data/tvs.json ni les médias.
+
+Aucune installation préalable de WinGet, .NET ou FFmpeg n'est requise.
+Ne déplace pas le dossier du serveur après l'installation sans relancer le wizard.
+
+
+INSTALLATION - SERVEUR PERMANENT (METHODE MANUELLE / ANCIENNE)
+--------------------------------------------------------------
 1. Installer .NET 10 SDK.
 2. Lancer 0_INSTALLER_FFMPEG.bat si FFmpeg n'est pas déjà installé.
 3. Lancer 1_AUTORISER_PARE_FEU.bat comme administrateur.
