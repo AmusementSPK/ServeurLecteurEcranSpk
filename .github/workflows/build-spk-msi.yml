@@ -98,7 +98,8 @@ jobs:
             -c Release `
             -p:ServerPublishDir="$server" `
             -p:ManagerPublishDir="$manager" `
-            -p:FfmpegExe="$ffmpeg"
+            -p:FfmpegExe="$ffmpeg" `
+            -p:ProductVersion="1.0.${{ github.run_number }}"
 
       - name: Collect MSI
         shell: pwsh
