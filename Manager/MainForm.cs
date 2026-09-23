@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.ServiceProcess;
 using System.Text.Json;
+using System.Security.Principal;
 
 namespace SPK.Server.Manager;
 
@@ -167,6 +168,9 @@ public sealed class MainForm : Form
         button.Size = new Size(114, 38);
         button.Click += async (_, _) =>
         {
+            if (!EnsureAdministrator())
+                return;
+
             button.Enabled = false;
             try
             {
@@ -283,6 +287,9 @@ public sealed class MainForm : Form
 
     private async Task ImportLegacyAsync()
     {
+        if (!EnsureAdministrator())
+            return;
+
         using var picker = new FolderBrowserDialog
         {
             Description = "Choisis le dossier racine de l'ancienne installation ServeurLecteurEcranSpk.",
@@ -382,6 +389,50 @@ public sealed class MainForm : Form
         {
             return new List<string>();
         }
+    }
+
+
+    private bool EnsureAdministrator()
+    {
+        if (IsAdministrator())
+            return true;
+
+        try
+        {
+            var executable = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(executable))
+                throw new InvalidOperationException("Chemin du Manager introuvable.");
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = executable,
+                UseShellExecute = true,
+                Verb = "runas"
+            });
+
+            BeginInvoke(Close);
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // L'utilisateur a annulé la demande UAC.
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                "Impossible d'obtenir les droits administrateur : " + ex.Message,
+                "SPK Server Manager",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+
+        return false;
+    }
+
+    private static bool IsAdministrator()
+    {
+        using var identity = WindowsIdentity.GetCurrent();
+        var principal = new WindowsPrincipal(identity);
+        return principal.IsInRole(WindowsBuiltInRole.Administrator);
     }
 
     private static void OpenTarget(string target)
