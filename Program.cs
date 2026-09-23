@@ -11,12 +11,17 @@ builder.WebHost.UseUrls("http://0.0.0.0:8090");
 builder.Services.Configure<StreamingOptions>(
     builder.Configuration.GetSection("Streaming"));
 
+builder.Services.AddWindowsService(options =>
+{
+    options.ServiceName = "Amusement SPK Display Server";
+});
+
 builder.Services.Configure<HostOptions>(options =>
 {
-    // Dernière ligne de défense : une exception d'un BackgroundService ne doit pas
-    // faire tomber le serveur web. Le heartbeat /health permettra au watchdog
-    // Windows de détecter un gestionnaire HLS mort et de redémarrer proprement.
-    options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore;
+    // En service Windows, un BackgroundService réellement fatal doit arrêter
+    // le processus afin que les Recovery Actions du Service Control Manager
+    // puissent redémarrer l'application proprement.
+    options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.StopHost;
 });
 
 const long maxUploadBytes = 2L * 1024 * 1024 * 1024;
@@ -29,16 +34,19 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = maxUploadBytes;
 });
 
+builder.Services.AddSingleton<SpkPaths>();
+builder.Services.AddSingleton<ILoggerProvider, SpkFileLoggerProvider>();
 builder.Services.AddSingleton<TvConfigStore>();
 builder.Services.AddSingleton<HlsProcessManager>();
 builder.Services.AddSingleton<VideoNormalizer>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HlsProcessManager>());
+builder.Services.AddHostedService<ServiceRecoveryMonitor>();
 
 var app = builder.Build();
 
-var cfg = app.Services.GetRequiredService<IOptions<StreamingOptions>>().Value;
-var hlsRoot = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, cfg.HlsFolder));
-var mediaRoot = Path.GetFullPath(Path.Combine(app.Environment.ContentRootPath, cfg.MediaFolder));
+var paths = app.Services.GetRequiredService<SpkPaths>();
+var hlsRoot = paths.HlsRoot;
+var mediaRoot = paths.MediaRoot;
 
 Directory.CreateDirectory(hlsRoot);
 Directory.CreateDirectory(mediaRoot);
@@ -121,6 +129,16 @@ app.MapGet("/health", (HlsProcessManager manager) =>
         ? Results.Ok(payload)
         : Results.Json(payload, statusCode: StatusCodes.Status503ServiceUnavailable);
 });
+
+app.MapGet("/api/system", (SpkPaths systemPaths) => Results.Ok(new
+{
+    service = "Amusement SPK Display Server",
+    version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown",
+    dataRoot = systemPaths.DataRoot,
+    mediaRoot = systemPaths.MediaRoot,
+    logsRoot = systemPaths.LogsRoot,
+    ffmpeg = systemPaths.FfmpegPath
+}));
 
 app.MapGet("/tv/{tvId}", (string tvId, TvConfigStore store) =>
 {
@@ -361,6 +379,15 @@ app.MapPost("/api/tvs/{tvId}/video", async (
         }
         catch { }
     }
+});
+
+var startupLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("SPK.Server");
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    startupLogger.LogInformation(
+        "Serveur SPK démarré. Données={DataRoot}; FFmpeg={FfmpegPath}; URL=http://0.0.0.0:8090",
+        paths.DataRoot,
+        paths.FfmpegPath);
 });
 
 app.Run();
